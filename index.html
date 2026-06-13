@@ -147,7 +147,7 @@
             <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px" id="income-audit-summary"></p>
             <div class="table-wrap" id="income-audit-body">
                 <table id="income-audit-table">
-                    <thead><tr><th style="width:30px">Ignore</th><th>Date</th><th>Source</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead>
+                    <thead><tr><th style="width:30px">Ignore</th><th>Date</th><th>Account</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -157,7 +157,7 @@
             <h3>Category Breakdown</h3>
             <div class="table-wrap">
                 <table id="category-table">
-                    <thead><tr><th>Category</th><th>Sources</th><th>Total</th><th>% of Income</th><th>Transactions</th><th>Status</th></tr></thead>
+                    <thead><tr><th>Category</th><th>Accounts</th><th>Total</th><th>% of Income</th><th>Transactions</th><th>Status</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -166,7 +166,7 @@
         <div class="card" style="margin-bottom:24px" id="unknown-section">
             <h3>🔍 Unknown / Uncategorized Spend</h3>
             <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">These transactions couldn't be auto-categorized. Review them to get a complete picture.</p>
-            <div class="table-wrap"><table id="unknown-table"><thead><tr><th>Date</th><th>Description</th><th>Amount</th></tr></thead><tbody></tbody></table></div>
+            <div class="table-wrap"><table id="unknown-table"><thead><tr><th>Date</th><th>Account</th><th>Description</th><th>Amount</th></tr></thead><tbody></tbody></table></div>
         </div>
 
         <!-- Raw Transactions -->
@@ -178,7 +178,7 @@
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px" id="source-filters"></div>
             <div class="table-wrap" id="raw-tx-body">
                 <table id="raw-tx-table">
-                    <thead><tr><th>Date</th><th>Source</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead>
+                    <thead><tr><th>Date</th><th>Account</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead>
                     <tbody></tbody>
                 </table>
                 <p style="font-size:12px;color:var(--text-secondary);margin-top:8px" id="raw-tx-count"></p>
@@ -222,28 +222,6 @@
             'Crypto': ['SHAKEAPY CRYPTO'],
             'Other': []
         };
-
-        function getSource(desc) {
-            const d = (desc || '').toUpperCase();
-            if (d.includes('PAYROLL DEPOSIT')) return 'Payroll';
-            if (d.includes('VISA - BNS')) return 'Visa (BNS)';
-            if (d.includes('MBNA') || d.includes('MASTERCARD')) return 'Mastercard';
-            if (d.includes('AMEX')) return 'Amex';
-            if (d.includes('RBC CREDIT')) return 'RBC Credit Card';
-            if (d.includes('PAYPAL')) return 'PayPal';
-            if (d.includes('INTERAC PURCHASE') || d.includes('CONTACTLESS')) return 'Debit/Interac';
-            if (d.includes('E-TRANSFER SENT')) return 'E-Transfer Out';
-            if (d.includes('E-TRANSFER - AUTODEPOSIT')) return 'E-Transfer In';
-            if (d.includes('ONLINE BANKING TRANSFER') || d.includes('ONLINE TRANSFER')) return 'Internal Transfer';
-            if (d.includes('ONLINE BANKING PAYMENT')) return 'Online Banking Pmt';
-            if (d.includes('ATM WITHDRAWAL')) return 'ATM';
-            if (d.includes('MISC PAYMENT')) return 'Direct Payment';
-            if (d.includes('BILL PAYMENT') || d.includes('UTILITY BILL')) return 'Bill Payment';
-            if (d.includes('LOAN PAYMENT')) return 'Loan Payment';
-            if (d.includes('MORTGAGE') || d.includes('RESIDENTIAL MTG')) return 'Mortgage';
-            if (d.includes('TAX REFUND') || d.includes('CCRA')) return 'Govt Tax';
-            return 'Other';
-        }
         
         function categorize(desc) {
             const d = (desc || '').toUpperCase();
@@ -256,7 +234,7 @@
         }
 
         function monthKey(d) {
-            const parts = d.split('/');
+            const parts = String(d).split('/');
             if (parts.length === 3) {
                 return `${parts[2]}-${parts[0].padStart(2,'0')}`;
             }
@@ -305,7 +283,6 @@
                 const cat = categorize(tx['Description 1'] || '');
                 let finalCat = cat;
                 if (amt > 0 && !['Income', 'Misc Income', 'Government'].includes(cat)) finalCat = 'Income';
-                tx._source = getSource(tx['Description 1'] || '');
                 tx._category = finalCat; tx._amount = amt; tx._monthKey = mk;
                 if (finalCat === 'Internal Transfer (Excluded)') {
                     // Skip — internal transfers are not real income or expenses
@@ -340,6 +317,8 @@
             else excludedIncomeKeys.delete(key);
             renderAll();
         }
+
+        function getAccount(tx) { return tx['Account Type'] || ''; }
 
         function renderAll() {
             selectedMonth = document.getElementById('month-select').value || selectedMonth;
@@ -397,20 +376,15 @@
                 });
             }
 
-            // Income Audit
-            const txIdx = {}; // map transaction index for unique keys
-            const incomeTx = md.transactions.filter(t => t._amount > 0).sort((a,b) => b._amount - a._amount);
-            
-            // Calculate effective income (excluding ignored)
+            // Income Audit — uses real Account Type column
+            const incomeAll = md.transactions.filter(t => t._amount > 0).sort((a,b) => b._amount - a._amount);
             let effectiveIncome = 0;
-            const incomeAll = md.transactions.filter(t => t._amount > 0);
             incomeAll.forEach((t,i) => {
-                txIdx[monthKey(t['Transaction Date'])] = `${selectedMonth}_${i}`;
                 if (!excludedIncomeKeys.has(`${selectedMonth}_${i}`)) effectiveIncome += t._amount;
             });
             
             document.getElementById('income-audit-summary').innerHTML = 
-                `<strong>${incomeTx.length} income transactions</strong> · <strong style="color:var(--green)">$${effectiveIncome.toLocaleString()}</strong> effective ($${income.toLocaleString()} raw) · <button style="margin-left:8px;padding:2px 10px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--text-secondary);cursor:pointer" onclick="excludedIncomeKeys.clear();renderAll()">Reset All</button>`;
+                `<strong>${incomeAll.length} income transactions</strong> · <strong style="color:var(--green)">$${effectiveIncome.toLocaleString()}</strong> effective ($${income.toLocaleString()} raw) · <button style="margin-left:8px;padding:2px 10px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--text-secondary);cursor:pointer" onclick="excludedIncomeKeys.clear();renderAll()">Reset All</button>`;
             
             document.querySelector('#income-audit-table tbody').innerHTML = incomeAll.map((t,i) => {
                 const key = `${selectedMonth}_${i}`;
@@ -418,11 +392,10 @@
                 const isExpensePay = (t['Description 1']||'').toUpperCase().includes('EXPENSE PAYMENT');
                 const flag = isTransfer || isExpensePay ? ' ⚠️' : '';
                 const isExcluded = excludedIncomeKeys.has(key);
-                const rowStyle = isExcluded ? 'style="opacity:0.35"' : '';
-                const bgStyle = (isTransfer || isExpensePay) ? 'style="background:rgba(245,158,11,0.06)"' : '';
+                const acct = getAccount(t);
                 return `<tr ${isExcluded ? 'style="opacity:0.35"' : (isTransfer||isExpensePay?'style="background:rgba(245,158,11,0.06)"':'')}>
                     <td style="text-align:center"><input type="checkbox" ${isExcluded?'checked':''} onchange="toggleIncomeExclusion('${key}',this.checked)" style="cursor:pointer;accent-color:var(--accent)"></td>
-                    <td>${t['Transaction Date']||''}</td><td style="font-size:11px;color:var(--text-secondary)">${t._source||''}</td><td>${(t['Description 1']||'').substring(0,60)}${flag}</td>
+                    <td>${t['Transaction Date']||''}</td><td style="font-size:11px;color:var(--text-secondary)">${acct}</td><td>${(t['Description 1']||'').substring(0,60)}${flag}</td>
                     <td><span class="badge green">${t._category}</span></td>
                     <td style="text-align:right;color:${isExcluded?'var(--text-secondary)':'var(--green)'};font-weight:600">$${t._amount.toFixed(2)}</td>
                 </tr>`;
@@ -433,26 +406,26 @@
                 const tl = md.balanceTimeline;
                 charts.cashflow = new Chart(document.getElementById('cashflowChart'), {
                     type: 'line',
-                    data: { labels: tl.map(t => { const p=t.date.split('/'); return p[0]+'/'+p[1]; }), datasets: [{ label: 'Balance', data: tl.map(t => t.balance), borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', fill: true, tension: 0.3, pointRadius: 0, pointHoverRadius: 4 }] },
+                    data: { labels: tl.map(t => { const p=String(t.date).split('/'); return p[0]+'/'+p[1]; }), datasets: [{ label: 'Balance', data: tl.map(t => t.balance), borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', fill: true, tension: 0.3, pointRadius: 0, pointHoverRadius: 4 }] },
                     options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8b8fa3', font: { size: 10 }, maxTicksLimit: 15 }, grid: { display: false } }, y: { ticks: { color: '#8b8fa3', callback: v => '$'+v.toLocaleString() }, grid: { color: '#1f2232' } } } }
                 });
             }
 
-            // Category Table
+            // Category Table — uses real Account Type
             const rows = Object.entries(md.categories).filter(([c,d]) => d.total < 0 && !['Income','Misc Income','Government'].includes(c)).sort((a,b) => a[1].total - b[1].total);
             document.querySelector('#category-table tbody').innerHTML = rows.map(([cat, data]) => {
-                const sources = [...new Set(data.transactions.filter(t => t._amount < 0).map(t => t._source).filter(Boolean))].slice(0,3).join(', ') || '—';
+                const accts = [...new Set(data.transactions.filter(t => t._amount < 0).map(t => getAccount(t)).filter(Boolean))].slice(0,3).join(', ') || '—';
                 const abs = Math.abs(data.total), pct = income > 0 ? (abs/income*100) : 0;
                 let st = 'green', stl = 'On track';
                 if (pct > 30) { st = 'red'; stl = 'Critical'; }
                 else if (pct > 15) { st = 'amber'; stl = 'Review'; }
                 const txList = data.transactions.filter(t => t._amount < 0).sort((a,b) => a._amount - b._amount).slice(0,10).map(t =>
-                    `<tr class="sub-row" data-cat="${cat.replace(/[^a-zA-Z]/g,'')}"><td>${t['Transaction Date']||''}</td><td>${(t['Description 1']||'').substring(0,60)}</td><td style="color:var(--red)">$${Math.abs(t._amount).toFixed(2)}</td></tr>`
+                    `<tr class="sub-row" data-cat="${cat.replace(/[^a-zA-Z]/g,'')}"><td>${t['Transaction Date']||''}</td><td style="font-size:11px;color:var(--text-secondary)">${getAccount(t)}</td><td>${(t['Description 1']||'').substring(0,55)}</td><td style="color:var(--red)">$${Math.abs(t._amount).toFixed(2)}</td></tr>`
                 ).join('');
-                return `<tr><td><span class="clickable" onclick="document.querySelectorAll('.sub-row[data-cat=\\'${cat.replace(/[^a-zA-Z]/g,'')}\\']').forEach(r=>r.classList.toggle('show'))">▶ ${cat}</span></td><td style="font-size:11px;color:var(--text-secondary);max-width:140px">${sources}</td><td style="color:var(--red)">$${abs.toFixed(2)}</td><td>${pct.toFixed(1)}%</td><td>${data.count}</td><td><span class="badge ${st}">${stl}</span></td></tr>${txList}`;
+                return `<tr><td><span class="clickable" onclick="document.querySelectorAll('.sub-row[data-cat=\\'${cat.replace(/[^a-zA-Z]/g,'')}\\']').forEach(r=>r.classList.toggle('show'))">▶ ${cat}</span></td><td style="font-size:11px;color:var(--text-secondary);max-width:140px">${accts}</td><td style="color:var(--red)">$${abs.toFixed(2)}</td><td>${pct.toFixed(1)}%</td><td>${data.count}</td><td><span class="badge ${st}">${stl}</span></td></tr>${txList}`;
             }).join('');
 
-            // Unknown
+            // Unknown — includes Account column
             const unkTx = [...(md.categories['PayPal (Uncategorized)']?.transactions || []), ...(md.categories['Other']?.transactions || [])].filter(t => t._amount < 0).sort((a,b) => a._amount - b._amount);
             if (unkTx.length === 0) {
                 document.getElementById('unknown-section').innerHTML = '<div class="card"><h3>🔍 Unknown Spend</h3><p style="color:var(--green);font-size:13px">✅ All transactions categorized this month!</p></div>';
@@ -460,7 +433,7 @@
                 const t = unkTx.reduce((s,tx) => s + Math.abs(tx._amount), 0);
                 document.getElementById('unknown-section').querySelector('p').innerHTML = `<strong>${unkTx.length} uncategorized tx</strong> totaling <strong style="color:var(--amber)">$${t.toFixed(2)}</strong>.`;
                 document.querySelector('#unknown-table tbody').innerHTML = unkTx.map(t =>
-                    `<tr><td>${t['Transaction Date']||''}</td><td>${(t['Description 1']||'').substring(0,70)}</td><td style="color:var(--red)">$${Math.abs(t._amount).toFixed(2)}</td></tr>`
+                    `<tr><td>${t['Transaction Date']||''}</td><td style="font-size:11px;color:var(--text-secondary)">${getAccount(t)}</td><td>${(t['Description 1']||'').substring(0,60)}</td><td style="color:var(--red)">$${Math.abs(t._amount).toFixed(2)}</td></tr>`
                 ).join('');
             }
 
@@ -491,9 +464,9 @@
             }
             document.getElementById('insights').innerHTML = insights.length > 0 ? insights.map(i => `<div class="insight-box"><h4>💡 ${i.title}</h4><p>${i.text}</p></div>`).join('') : '<p style="color:var(--text-secondary)">No insights yet. Upload more data.</p>';
 
-            // Raw Transactions
+            // Raw Transactions — filter by real Account Type
             const allTx = [...md.transactions].sort((a,b) => (a['Transaction Date']||'').localeCompare(b['Transaction Date']||''));
-            const sourcesAvailable = [...new Set(allTx.map(t => t._source).filter(Boolean))].sort();
+            const sourcesAvailable = [...new Set(allTx.map(t => getAccount(t)).filter(Boolean))].sort();
             let rawFilter = window._rawFilter || 'All';
             if (!sourcesAvailable.includes(rawFilter) && rawFilter !== 'All') rawFilter = 'All';
             window._rawFilter = rawFilter;
@@ -501,16 +474,16 @@
             document.getElementById('source-filters').innerHTML = 
                 `<button onclick="window._rawFilter='All';renderAll()" style="padding:4px 14px;border-radius:20px;border:1px solid var(--border);background:${rawFilter==='All'?'var(--accent)':'transparent'};color:${rawFilter==='All'?'white':'var(--text-secondary)'};font-size:11px;cursor:pointer;font-weight:600">All (${allTx.length})</button>` +
                 sourcesAvailable.map(src => {
-                    const count = allTx.filter(t => t._source === src).length;
+                    const count = allTx.filter(t => getAccount(t) === src).length;
                     if (count === 0) return `<button disabled style="padding:4px 14px;border-radius:20px;border:1px solid #1a1d27;background:transparent;color:#3a3d4a;font-size:11px;font-weight:600;opacity:0.3">${src} (0)</button>`;
                     return `<button onclick="window._rawFilter='${src}';renderAll()" style="padding:4px 14px;border-radius:20px;border:1px solid var(--border);background:${rawFilter===src?'var(--accent)':'transparent'};color:${rawFilter===src?'white':'var(--text-secondary)'};font-size:11px;cursor:pointer;font-weight:600">${src} (${count})</button>`;
                 }).join('');
 
-            const filtered = rawFilter === 'All' ? allTx : allTx.filter(t => t._source === rawFilter);
+            const filtered = rawFilter === 'All' ? allTx : allTx.filter(t => getAccount(t) === rawFilter);
             document.querySelector('#raw-tx-table tbody').innerHTML = filtered.map(t => {
                 const isIncome = t._amount > 0;
                 const amtColor = isIncome ? 'var(--green)' : 'var(--red)';
-                return `<tr><td>${t['Transaction Date']||''}</td><td style="font-size:11px;color:var(--text-secondary)">${t._source||''}</td><td>${(t['Description 1']||'').substring(0,65)}</td><td><span class="badge green">${t._category}</span></td><td style="text-align:right;color:${amtColor};font-weight:600">$${t._amount.toFixed(2)}</td></tr>`;
+                return `<tr><td>${t['Transaction Date']||''}</td><td style="font-size:11px;color:var(--text-secondary)">${getAccount(t)}</td><td>${(t['Description 1']||'').substring(0,65)}</td><td><span class="badge green">${t._category}</span></td><td style="text-align:right;color:${amtColor};font-weight:600">$${t._amount.toFixed(2)}</td></tr>`;
             }).join('');
             document.getElementById('raw-tx-count').innerHTML = 
                 `Showing <strong>${filtered.length}</strong> of ${allTx.length} transactions · Income: <strong style="color:var(--green)">$${filtered.filter(t=>t._amount>0).reduce((s,t)=>s+t._amount,0).toFixed(0)}</strong> · Expenses: <strong style="color:var(--red)">$${filtered.filter(t=>t._amount<0).reduce((s,t)=>s+Math.abs(t._amount),0).toFixed(0)}</strong>`;
