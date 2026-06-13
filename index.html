@@ -169,6 +169,22 @@
             <div class="table-wrap"><table id="unknown-table"><thead><tr><th>Date</th><th>Description</th><th>Amount</th></tr></thead><tbody></tbody></table></div>
         </div>
 
+        <!-- Raw Transactions -->
+        <div class="card" style="margin-bottom:24px" id="raw-tx-section">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                <h3 style="margin:0">📋 Raw Transactions</h3>
+                <span style="font-size:12px;color:var(--text-secondary);cursor:pointer" onclick="document.getElementById('raw-tx-body').classList.toggle('hidden')">Show/Hide</span>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px" id="source-filters"></div>
+            <div class="table-wrap" id="raw-tx-body">
+                <table id="raw-tx-table">
+                    <thead><tr><th>Date</th><th>Source</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+                <p style="font-size:12px;color:var(--text-secondary);margin-top:8px" id="raw-tx-count"></p>
+            </div>
+        </div>
+
         <div class="card" style="margin-bottom:24px">
             <h3>🧠 Insights & Recommendations</h3>
             <div id="insights"></div>
@@ -474,6 +490,30 @@
                 insights.push({title:'Micro-Spending', text:`${smallTx.length} tx under $5 totaling $${smallTx.reduce((a,t)=>a+Math.abs(t._amount),0).toFixed(2)}. Small amounts add up.`});
             }
             document.getElementById('insights').innerHTML = insights.length > 0 ? insights.map(i => `<div class="insight-box"><h4>💡 ${i.title}</h4><p>${i.text}</p></div>`).join('') : '<p style="color:var(--text-secondary)">No insights yet. Upload more data.</p>';
+
+            // Raw Transactions
+            const allTx = [...md.transactions].sort((a,b) => (a['Transaction Date']||'').localeCompare(b['Transaction Date']||''));
+            const sourcesAvailable = [...new Set(allTx.map(t => t._source).filter(Boolean))].sort();
+            let rawFilter = window._rawFilter || 'All';
+            if (!sourcesAvailable.includes(rawFilter) && rawFilter !== 'All') rawFilter = 'All';
+            window._rawFilter = rawFilter;
+
+            document.getElementById('source-filters').innerHTML = 
+                `<button onclick="window._rawFilter='All';renderAll()" style="padding:4px 14px;border-radius:20px;border:1px solid var(--border);background:${rawFilter==='All'?'var(--accent)':'transparent'};color:${rawFilter==='All'?'white':'var(--text-secondary)'};font-size:11px;cursor:pointer;font-weight:600">All (${allTx.length})</button>` +
+                sourcesAvailable.map(src => {
+                    const count = allTx.filter(t => t._source === src).length;
+                    if (count === 0) return `<button disabled style="padding:4px 14px;border-radius:20px;border:1px solid #1a1d27;background:transparent;color:#3a3d4a;font-size:11px;font-weight:600;opacity:0.3">${src} (0)</button>`;
+                    return `<button onclick="window._rawFilter='${src}';renderAll()" style="padding:4px 14px;border-radius:20px;border:1px solid var(--border);background:${rawFilter===src?'var(--accent)':'transparent'};color:${rawFilter===src?'white':'var(--text-secondary)'};font-size:11px;cursor:pointer;font-weight:600">${src} (${count})</button>`;
+                }).join('');
+
+            const filtered = rawFilter === 'All' ? allTx : allTx.filter(t => t._source === rawFilter);
+            document.querySelector('#raw-tx-table tbody').innerHTML = filtered.map(t => {
+                const isIncome = t._amount > 0;
+                const amtColor = isIncome ? 'var(--green)' : 'var(--red)';
+                return `<tr><td>${t['Transaction Date']||''}</td><td style="font-size:11px;color:var(--text-secondary)">${t._source||''}</td><td>${(t['Description 1']||'').substring(0,65)}</td><td><span class="badge green">${t._category}</span></td><td style="text-align:right;color:${amtColor};font-weight:600">$${t._amount.toFixed(2)}</td></tr>`;
+            }).join('');
+            document.getElementById('raw-tx-count').innerHTML = 
+                `Showing <strong>${filtered.length}</strong> of ${allTx.length} transactions · Income: <strong style="color:var(--green)">$${filtered.filter(t=>t._amount>0).reduce((s,t)=>s+t._amount,0).toFixed(0)}</strong> · Expenses: <strong style="color:var(--red)">$${filtered.filter(t=>t._amount<0).reduce((s,t)=>s+Math.abs(t._amount),0).toFixed(0)}</strong>`;
 
             // Comparison cards
             const months = Object.keys(monthlyData).sort();
