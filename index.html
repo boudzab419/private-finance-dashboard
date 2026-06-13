@@ -157,7 +157,7 @@
             <h3>Category Breakdown</h3>
             <div class="table-wrap">
                 <table id="category-table">
-                    <thead><tr><th>Category</th><th>Total</th><th>% of Income</th><th>Transactions</th><th>Status</th></tr></thead>
+                    <thead><tr><th>Category</th><th>Sources</th><th>Total</th><th>% of Income</th><th>Transactions</th><th>Status</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -188,10 +188,11 @@
             'Housing': ['RESIDENTIAL MTG', 'MORTGAGE FN', 'CONDO FEES', 'PROPERTY TAX', 'TIPP', 'ENMAX', 'UTILITY BILL', 'PINE CANADA'],
             'Income': ['PAYROLL DEPOSIT', 'TAX REFUND', 'E-TRANSFER - AUTODEPOSIT', 'EXPENSE PAYMENT', 'ACCOUNT PAYABLE'],
             'Childcare': ['CREATIONS CHILDCARE', 'CREATIONS CHILD CARE'],
-            'Food & Dining': ['COSTCO WHOLESAL', 'MCDONALD', 'MR MIKES', 'RESTAURANT', 'FOOD'],
+            'Groceries': ['COSTCO WHOLESAL', 'WALMART'],
+            'Food & Dining': ['MCDONALD', 'MR MIKES', 'RESTAURANT', 'FOOD'],
             'Transportation': ['GARAGE AVENUE MECHANIC', 'TIRES', 'CAR AUDIO', 'GAS', 'ESSO', 'SHELL', 'PETRO'],
             'Insurance': ['LIFE INSURANCE', 'BMO INSURANCE', 'SANDBOX', 'CO-OP LIFE', 'CANADA LIFE', 'SQUARE ONE INSU', 'SUN LIFE'],
-            'Shopping': ['SHOPPERS DRUG', 'DYNAMITE', 'AMAZON', 'WALMART', 'ESSENCE WELLNES'],
+            'Shopping': ['SHOPPERS DRUG', 'DYNAMITE', 'AMAZON', 'ESSENCE WELLNES'],
             'Debt Payments': ['LOAN PAYMENT', 'VISA - BNS', 'MASTERCARD', 'MBNA', 'AMEX BILL', 'RBC CREDIT', 'ONLINE BANKING PAYMENT'],
             'Bank Fees': ['OVERDRAFT', 'MONTHLY FEE', 'CHQ PRINTING FEE'],
             'Transfers': ['E-TRANSFER SENT', 'ATM WITHDRAWAL', 'ONLINE TRANSFER TO DEPOSIT'],
@@ -424,6 +425,7 @@
             // Category Table
             const rows = Object.entries(md.categories).filter(([c,d]) => d.total < 0 && !['Income','Misc Income','Government'].includes(c)).sort((a,b) => a[1].total - b[1].total);
             document.querySelector('#category-table tbody').innerHTML = rows.map(([cat, data]) => {
+                const sources = [...new Set(data.transactions.filter(t => t._amount < 0).map(t => t._source).filter(Boolean))].slice(0,3).join(', ') || '—';
                 const abs = Math.abs(data.total), pct = income > 0 ? (abs/income*100) : 0;
                 let st = 'green', stl = 'On track';
                 if (pct > 30) { st = 'red'; stl = 'Critical'; }
@@ -431,7 +433,7 @@
                 const txList = data.transactions.filter(t => t._amount < 0).sort((a,b) => a._amount - b._amount).slice(0,10).map(t =>
                     `<tr class="sub-row" data-cat="${cat.replace(/[^a-zA-Z]/g,'')}"><td>${t['Transaction Date']||''}</td><td>${(t['Description 1']||'').substring(0,60)}</td><td style="color:var(--red)">$${Math.abs(t._amount).toFixed(2)}</td></tr>`
                 ).join('');
-                return `<tr><td><span class="clickable" onclick="document.querySelectorAll('.sub-row[data-cat=\\'${cat.replace(/[^a-zA-Z]/g,'')}\\']').forEach(r=>r.classList.toggle('show'))">▶ ${cat}</span></td><td style="color:var(--red)">$${abs.toFixed(2)}</td><td>${pct.toFixed(1)}%</td><td>${data.count}</td><td><span class="badge ${st}">${stl}</span></td></tr>${txList}`;
+                return `<tr><td><span class="clickable" onclick="document.querySelectorAll('.sub-row[data-cat=\\'${cat.replace(/[^a-zA-Z]/g,'')}\\']').forEach(r=>r.classList.toggle('show'))">▶ ${cat}</span></td><td style="font-size:11px;color:var(--text-secondary);max-width:140px">${sources}</td><td style="color:var(--red)">$${abs.toFixed(2)}</td><td>${pct.toFixed(1)}%</td><td>${data.count}</td><td><span class="badge ${st}">${stl}</span></td></tr>${txList}`;
             }).join('');
 
             // Unknown
@@ -456,7 +458,7 @@
                 const s = ppTx.reduce((a,t)=>a+Math.abs(t._amount),0);
                 insights.push({title:'PayPal Black Hole', text:`$${s.toFixed(2)} in untracked PayPal spending (${(s/expenses*100).toFixed(1)}% of expenses). Check your PayPal activity: subscriptions? Shopping? Categorize these.`});
             }
-            const costcoTx = (md.categories['Food & Dining']?.transactions || []).filter(t => (t['Description 1']||'').toUpperCase().includes('COSTCO'));
+            const costcoTx = (md.categories['Groceries']?.transactions || []).filter(t => (t['Description 1']||'').toUpperCase().includes('COSTCO'));
             if (costcoTx.length > 0) {
                 const ct = costcoTx.reduce((a,t)=>a+Math.abs(t._amount),0);
                 insights.push({title:'Costco Spending', text:`${costcoTx.length} Costco trips totaling $${ct.toFixed(2)} (avg $${(ct/costcoTx.length).toFixed(2)}/visit).${costcoTx.length>4?' Consolidate trips to reduce impulse buys.':''}`});
