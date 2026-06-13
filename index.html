@@ -3,97 +3,407 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Private Finance Dashboard</title>
-    <!-- Include PapaParse for CSV parsing and Chart.js for graphs via CDN -->
+    <title>Finance Intelligence Dashboard</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; }
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
+        :root {
+            --bg: #0f1117;
+            --card-bg: #1a1d27;
+            --card-bg-hover: #1f2232;
+            --border: #2a2d3a;
+            --text: #e1e4ed;
+            --text-secondary: #8b8fa3;
+            --accent: #6366f1;
+            --accent-hover: #818cf8;
+            --green: #10b981;
+            --red: #ef4444;
+            --amber: #f59e0b;
+            --green-bg: #0d3320;
+            --red-bg: #3b1414;
+            --amber-bg: #3d2c0a;
+            --radius: 12px;
+            --radius-sm: 8px;
+            --shadow: 0 4px 24px rgba(0,0,0,0.3);
+            --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
+        
+        .password-wall {
+            display: flex; align-items: center; justify-content: center; min-height: 100vh; background: var(--bg);
+        }
+        .password-wall .card { background: var(--card-bg); padding: 40px; border-radius: var(--radius); box-shadow: var(--shadow); width: 400px; text-align: center; }
+        .password-wall h1 { font-size: 24px; margin-bottom: 8px; }
+        .password-wall p { color: var(--text-secondary); margin-bottom: 24px; font-size: 14px; }
+        .password-wall input { width: 100%; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #0f1117; color: var(--text); font-size: 14px; outline: none; }
+        .password-wall input:focus { border-color: var(--accent); }
+        .password-wall button { width: 100%; padding: 12px; margin-top: 12px; background: var(--accent); color: white; border: none; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+        .password-wall button:hover { background: var(--accent-hover); }
+        .password-wall .error { color: var(--red); margin-top: 12px; font-size: 13px; }
+        
+        .app { max-width: 1400px; margin: 0 auto; padding: 24px; display: none; }
+        .app.active { display: block; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
+        .header h1 { font-size: 28px; font-weight: 700; }
+        .header .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .header select, .header button { padding: 8px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--card-bg); color: var(--text); font-size: 13px; cursor: pointer; outline: none; }
+        .header select:hover, .header button:hover { border-color: var(--accent); }
+        .header .upload-btn { background: var(--accent); border-color: var(--accent); font-weight: 600; }
+        .header .upload-btn:hover { background: var(--accent-hover); }
+        
+        .kpi-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+        .kpi { background: var(--card-bg); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
+        .kpi .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin-bottom: 6px; }
+        .kpi .value { font-size: 28px; font-weight: 700; }
+        .kpi .value.green { color: var(--green); }
+        .kpi .value.red { color: var(--red); }
+        .kpi .sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+        
+        .alerts { margin-bottom: 24px; display: flex; flex-direction: column; gap: 8px; }
+        .alert { padding: 14px 18px; border-radius: var(--radius-sm); font-size: 13px; display: flex; align-items: center; gap: 10px; line-height: 1.5; }
+        .alert.red { background: var(--red-bg); border-left: 3px solid var(--red); color: #fca5a5; }
+        .alert.amber { background: var(--amber-bg); border-left: 3px solid var(--amber); color: #fcd34d; }
+        .alert.green { background: var(--green-bg); border-left: 3px solid var(--green); color: #6ee7b7; }
+        .alert .icon { font-size: 18px; flex-shrink: 0; }
+        
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+        .card { background: var(--card-bg); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); }
+        .card h3 { font-size: 15px; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+        .card .chart-wrap { position: relative; width: 100%; }
+        .card .chart-wrap canvas { max-height: 280px; }
+        
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { text-align: left; padding: 10px 12px; color: var(--text-secondary); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+        td { padding: 10px 12px; border-bottom: 1px solid #1a1d27; }
+        tr:hover td { background: rgba(99,102,241,0.05); }
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+        .badge.green { background: var(--green-bg); color: var(--green); }
+        .badge.red { background: var(--red-bg); color: var(--red); }
+        .badge.amber { background: var(--amber-bg); color: var(--amber); }
+        .clickable { cursor: pointer; color: var(--accent); }
+        .clickable:hover { text-decoration: underline; }
+        
+        .sub-row { display: none; }
+        .sub-row.show { display: table-row; }
+        .sub-row td { background: #111318; padding: 12px 12px 12px 36px; font-size: 12px; color: var(--text-secondary); border-bottom: 1px solid #151820; }
+        
+        .insight-box { padding: 16px; background: #111318; border-radius: var(--radius-sm); margin-bottom: 12px; border-left: 3px solid var(--accent); }
+        .insight-box h4 { font-size: 13px; margin-bottom: 6px; color: var(--accent); }
+        .insight-box p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+        
+        @media (max-width: 900px) {
+            .grid-2, .grid-3, .kpi-bar { grid-template-columns: 1fr; }
+            .header h1 { font-size: 22px; }
+            .kpi .value { font-size: 22px; }
+        }
+        
         .hidden { display: none; }
-        input, button { width: 100%; padding: 10px; margin-top: 10px; box-sizing: border-box; }
-        button { background: #0070f3; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        #file-input { display: none; }
     </style>
 </head>
 <body>
-
-    <!-- 1. PASSWORD WALL -->
-    <div id="password-wall" class="card">
-        <h2>Financial Dashboard Login</h2>
-        <input type="password" id="password-input" placeholder="Enter Master Password">
-        <button onclick="checkPassword()">Unlock Dashboard</button>
-        <p id="error-msg" style="color: red; margin-top: 10px;"></p>
-    </div>
-
-    <!-- 2. PRIVATE DASHBOARD (Hidden by default) -->
-    <div id="dashboard" class="card hidden" style="max-width: 900px;">
-        <h2>Personal Finance Analyzer</h2>
-        <p>Upload your bank CSV extract below. Your data is processed entirely in your browser and is never uploaded to a server.</p>
-        
-        <input type="file" id="csv-file" accept=".csv">
-        <button onclick="processCSV()">Analyze Statement</button>
-
-        <div id="analysis-results" class="hidden" style="margin-top: 30px;">
-            <h3>Spending Summary</h3>
-            <canvas id="financeChart" width="400" height="200"></canvas>
-            <div id="raw-data" style="margin-top: 20px;"></div>
+    <div id="password-wall" class="password-wall">
+        <div class="card">
+            <h1>🔐 Finance Dashboard</h1>
+            <p>Enter your master password to continue</p>
+            <input type="password" id="password-input" placeholder="Password" onkeydown="if(event.key==='Enter')checkPassword()">
+            <button onclick="checkPassword()">Unlock</button>
+            <p id="error-msg" class="error"></p>
         </div>
     </div>
 
-    <script>
-        // Check password against our Vercel Serverless Function
-        async function checkPassword() {
-            const password = document.getElementById('password-input').value;
-            const response = await fetch('/api/password', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password })
-            });
+    <div id="app" class="app">
+        <div class="header">
+            <h1>📊 Finance Intelligence</h1>
+            <div class="controls">
+                <button class="upload-btn" onclick="document.getElementById('file-input').click()">📂 Upload CSV</button>
+                <input type="file" id="file-input" accept=".csv" onchange="handleFileUpload(this)">
+                <select id="month-select" onchange="renderAll()"></select>
+            </div>
+        </div>
 
-            const data = await response.json();
-            if (response.ok && data.success) {
-                document.getElementById('password-wall').classList.add('hidden');
-                document.getElementById('dashboard').classList.remove('hidden');
-            } else {
-                document.getElementById('error-msg').innerText = data.error || 'Access Denied';
+        <div class="kpi-bar" id="kpi-bar"></div>
+        <div class="alerts" id="alerts"></div>
+
+        <div class="grid-2">
+            <div class="card"><h3>Expense Breakdown</h3><div class="chart-wrap"><canvas id="expenseChart"></canvas></div></div>
+            <div class="card"><h3>Income Sources</h3><div class="chart-wrap"><canvas id="incomeChart"></canvas></div></div>
+        </div>
+
+        <div class="card" style="margin-bottom:24px">
+            <h3>Cash Flow Timeline</h3>
+            <div class="chart-wrap"><canvas id="cashflowChart" style="max-height:250px;"></canvas></div>
+        </div>
+
+        <div class="card" style="margin-bottom:24px">
+            <h3>Category Breakdown</h3>
+            <div class="table-wrap">
+                <table id="category-table">
+                    <thead><tr><th>Category</th><th>Total</th><th>% of Income</th><th>Transactions</th><th>Status</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom:24px" id="unknown-section">
+            <h3>🔍 Unknown / Uncategorized Spend</h3>
+            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">These transactions couldn't be auto-categorized. Review them to get a complete picture.</p>
+            <div class="table-wrap"><table id="unknown-table"><thead><tr><th>Date</th><th>Description</th><th>Amount</th></tr></thead><tbody></tbody></table></div>
+        </div>
+
+        <div class="card" style="margin-bottom:24px">
+            <h3>🧠 Insights & Recommendations</h3>
+            <div id="insights"></div>
+        </div>
+
+        <div class="grid-3" id="monthly-cards" style="margin-bottom:24px"></div>
+    </div>
+
+    <script>
+        let allData = [];
+        let monthlyData = {};
+        let charts = {};
+        let selectedMonth = null;
+
+        const CATEGORIES = {
+            'Housing': ['RESIDENTIAL MTG', 'MORTGAGE FN', 'CONDO FEES', 'PROPERTY TAX', 'TIPP', 'ENMAX', 'UTILITY BILL', 'PINE CANADA'],
+            'Income': ['PAYROLL DEPOSIT', 'TAX REFUND', 'E-TRANSFER - AUTODEPOSIT', 'EXPENSE PAYMENT', 'ACCOUNT PAYABLE'],
+            'Childcare': ['CREATIONS CHILDCARE', 'CREATIONS CHILD CARE'],
+            'Food & Dining': ['COSTCO WHOLESAL', 'MCDONALD', 'MR MIKES', 'RESTAURANT', 'FOOD'],
+            'Transportation': ['GARAGE AVENUE MECHANIC', 'TIRES', 'CAR AUDIO', 'GAS', 'ESSO', 'SHELL', 'PETRO'],
+            'Insurance': ['LIFE INSURANCE', 'BMO INSURANCE', 'SANDBOX', 'CO-OP LIFE', 'CANADA LIFE', 'SQUARE ONE INSU', 'SUN LIFE'],
+            'Shopping': ['SHOPPERS DRUG', 'DYNAMITE', 'AMAZON', 'WALMART', 'ESSENCE WELLNES'],
+            'Debt Payments': ['LOAN PAYMENT', 'VISA - BNS', 'MASTERCARD', 'MBNA', 'AMEX BILL', 'RBC CREDIT', 'ONLINE BANKING PAYMENT'],
+            'Bank Fees': ['OVERDRAFT', 'MONTHLY FEE', 'CHQ PRINTING FEE'],
+            'Transfers': ['ONLINE BANKING TRANSFER', 'ONLINE TRANSFER', 'E-TRANSFER SENT', 'ATM WITHDRAWAL'],
+            'Health & Wellness': ['MASSAGE ADDICT', 'PHARMACY', 'IMPACT ORTHO'],
+            'Charity & Giving': ['WORLD VISION', 'MIF-PAC'],
+            'PayPal (Uncategorized)': ['PAYPAL'],
+            'Government': ['CCRA CANADA', 'GOVERNMENT OF ALBERTA'],
+            'Misc Income': ['MISC PAYMENT HSA', 'PWCMSLP'],
+            'Crypto': ['SHAKEAPY CRYPTO'],
+            'Other': []
+        };
+
+        function categorize(desc) {
+            const d = (desc || '').toUpperCase();
+            for (const [cat, keywords] of Object.entries(CATEGORIES)) {
+                for (const kw of keywords) {
+                    if (d.includes(kw)) return cat;
+                }
+            }
+            return 'Other';
+        }
+
+        function monthKey(d) {
+            const parts = d.split('/');
+            if (parts.length === 3) {
+                return `${parts[2]}-${parts[0].padStart(2,'0')}`;
+            }
+            return '';
+        }
+
+        function monthLabel(key) {
+            const [y, m] = key.split('-');
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return `${months[parseInt(m)-1]} ${y}`;
+        }
+
+        async function checkPassword() {
+            const pw = document.getElementById('password-input').value;
+            try {
+                const r = await fetch('/api/password', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password:pw}) });
+                const d = await r.json();
+                if (r.ok && d.success) {
+                    document.getElementById('password-wall').style.display = 'none';
+                    document.getElementById('app').classList.add('active');
+                } else {
+                    document.getElementById('error-msg').innerText = d.error || 'Access Denied';
+                }
+            } catch(e) {
+                document.getElementById('error-msg').innerText = 'Connection error.';
             }
         }
 
-        // Parse CSV data locally using PapaParse
-        function processCSV() {
-            const fileInput = document.getElementById('csv-file');
-            if (!fileInput.files[0]) return alert("Please select a CSV file first.");
-
-            Papa.parse(fileInput.files[0], {
-                header: true,
-                dynamicTyping: true,
-                complete: function(results) {
-                    renderDashboardData(results.data);
-                }
+        function handleFileUpload(input) {
+            if (!input.files[0]) return;
+            Papa.parse(input.files[0], {
+                header: true, dynamicTyping: true, skipEmptyLines: true,
+                complete: function(results) { processData(results.data); },
+                error: function(err) { alert('CSV parse error: ' + err.message); }
             });
         }
 
-        // Handle data logic and build your spending chart
-        function renderDashboardData(data) {
-            document.getElementById('analysis-results').classList.remove('hidden');
-            
-            // Example: Simple logic assuming your CSV has "Description" and "Amount" columns
-            // You will want to tweak this mapping based on your specific bank's CSV headers
-            console.log("Parsed CSV Data:", data);
-
-            // Basic placeholder chart initialization
-            const ctx = document.getElementById('financeChart').getContext('2d');
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: ['Groceries', 'Utilities', 'Entertainment', 'Other'],
-                    datasets: [{
-                        label: 'Spending by Category ($)',
-                        data: [120, 190, 30, 50], // Tweak your JS to aggregate your actual CSV totals here
-                        backgroundColor: '#0070f3'
-                    }]
-                }
+        function processData(data) {
+            allData = data.filter(r => r['Transaction Date'] && !isNaN(r['CAD$']));
+            monthlyData = {};
+            allData.forEach(tx => {
+                const mk = monthKey(tx['Transaction Date']);
+                if (!mk) return;
+                if (!monthlyData[mk]) monthlyData[mk] = { income: 0, expenses: 0, categories: {}, transactions: [] };
+                const amt = tx['CAD$'] || 0;
+                const cat = categorize(tx['Description 1'] || '');
+                let finalCat = cat;
+                if (amt > 0 && !['Income', 'Misc Income', 'Government'].includes(cat)) finalCat = 'Income';
+                tx._category = finalCat; tx._amount = amt; tx._monthKey = mk;
+                if (amt > 0) monthlyData[mk].income += amt;
+                else monthlyData[mk].expenses += Math.abs(amt);
+                if (!monthlyData[mk].categories[finalCat]) monthlyData[mk].categories[finalCat] = { total: 0, count: 0, transactions: [] };
+                monthlyData[mk].categories[finalCat].total += amt;
+                monthlyData[mk].categories[finalCat].count++;
+                monthlyData[mk].categories[finalCat].transactions.push(tx);
+                monthlyData[mk].transactions.push(tx);
             });
+            for (const [mk, md] of Object.entries(monthlyData)) {
+                let balance = 0;
+                const sorted = [...md.transactions].sort((a,b) => (a['Transaction Date']||'').localeCompare(b['Transaction Date']||''));
+                md.balanceTimeline = [];
+                sorted.forEach(tx => { balance += tx._amount; md.balanceTimeline.push({ date: tx['Transaction Date'], balance }); });
+            }
+            const months = Object.keys(monthlyData).sort();
+            const sel = document.getElementById('month-select');
+            sel.innerHTML = months.map(m => `<option value="${m}">${monthLabel(m)}</option>`).join('');
+            if (months.length > 0) { selectedMonth = months[months.length - 1]; sel.value = selectedMonth; }
+            renderAll();
+        }
+
+        function destroyCharts() { Object.values(charts).forEach(c => { try { c.destroy(); } catch(e){} }); charts = {}; }
+
+        function renderAll() {
+            selectedMonth = document.getElementById('month-select').value || selectedMonth;
+            if (!selectedMonth || !monthlyData[selectedMonth]) return;
+            destroyCharts();
+            const md = monthlyData[selectedMonth];
+            
+            // KPI
+            const income = md.income, expenses = md.expenses, net = income - expenses;
+            const sr = income > 0 ? ((net/income)*100) : 0;
+            const odTx = (md.categories['Bank Fees']?.transactions || []).filter(t => (t['Description 1']||'').toUpperCase().includes('OVERDRAFT'));
+            document.getElementById('kpi-bar').innerHTML = 
+                `<div class="kpi"><div class="label">Total Income</div><div class="value green">$${income.toLocaleString()}</div></div>
+                <div class="kpi"><div class="label">Total Expenses</div><div class="value red">$${expenses.toLocaleString()}</div></div>
+                <div class="kpi"><div class="label">Net</div><div class="value ${net>=0?'green':'red'}">$${net.toLocaleString()}</div><div class="sub">${sr.toFixed(1)}% savings rate</div></div>
+                <div class="kpi"><div class="label">Transactions</div><div class="value">${md.transactions.length}</div><div class="sub">${odTx.length} od fees · $${Math.abs(odTx.reduce((s,t)=>s+t._amount,0)).toFixed(0)}</div></div>`;
+
+            // Alerts
+            const alerts = [];
+            if (odTx.length > 0) {
+                const s = Math.abs(odTx.reduce((a,t)=>a+t._amount,0));
+                alerts.push({type:'red', icon:'🚨', text:`<strong>$${s.toFixed(2)}</strong> in overdraft fees (${odTx.length} charges). At this rate: <strong>~$${(s*12).toFixed(0)}/year</strong>. A $500 buffer would eliminate this.`});
+            }
+            const ppTx = (md.categories['PayPal (Uncategorized)']?.transactions || []).filter(t => t._amount < 0);
+            if (ppTx.length > 0) {
+                const s = ppTx.reduce((a,t)=>a+Math.abs(t._amount),0);
+                alerts.push({type:'amber', icon:'⚠️', text:`Unknown PayPal: <strong>$${s.toFixed(2)}</strong> across ${ppTx.length} tx (${(s/expenses*100).toFixed(1)}% of expenses). Completely opaque — tag these.`});
+            }
+            const mfTx = (md.categories['Bank Fees']?.transactions || []).filter(t => (t['Description 1']||'').toUpperCase().includes('MONTHLY FEE'));
+            if (mfTx.length > 0) {
+                alerts.push({type:'amber', icon:'🏦', text:`Monthly banking fee: <strong>$${Math.abs(mfTx.reduce((a,t)=>a+t._amount,0)).toFixed(2)}</strong>. Many accounts waive this with a minimum balance.`});
+            }
+            document.getElementById('alerts').innerHTML = alerts.map(a => `<div class="alert ${a.type}"><span class="icon">${a.icon}</span><span>${a.text}</span></div>`).join('');
+
+            // Expense Doughnut
+            const cats = Object.entries(md.categories).filter(([c,d]) => d.total < 0 && !['Income','Misc Income','Government'].includes(c)).sort((a,b) => a[1].total - b[1].total);
+            if (cats.length > 0) {
+                const others = cats.slice(7);
+                let lbl = cats.slice(0,7).map(c => c[0]), val = cats.slice(0,7).map(c => Math.abs(c[1].total));
+                if (others.length > 0) { lbl.push('Other'); val.push(others.reduce((s,c) => s + Math.abs(c[1].total), 0)); }
+                charts.expense = new Chart(document.getElementById('expenseChart'), {
+                    type: 'doughnut',
+                    data: { labels: lbl, datasets: [{ data: val, backgroundColor: ['#6366f1','#8b5cf6','#a78bfa','#ec4899','#f43f5e','#f59e0b','#10b981','#6b7280'].slice(0,lbl.length), borderColor: '#1a1d27', borderWidth: 2 }] },
+                    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'right', labels: { color: '#8b8fa3', font: { size: 11 }, padding: 12 } } } }
+                });
+            }
+
+            // Income Bar
+            const incCats = Object.entries(md.categories).filter(([c,d]) => d.total > 0).sort((a,b) => b[1].total - a[1].total);
+            if (incCats.length > 0) {
+                charts.income = new Chart(document.getElementById('incomeChart'), {
+                    type: 'bar',
+                    data: { labels: incCats.map(c => c[0]), datasets: [{ label: 'Income ($)', data: incCats.map(c => c[1].total), backgroundColor: ['#10b981','#34d399','#6ee7b7','#a7f3d0','#059669','#047857'], borderRadius: 6 }] },
+                    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8b8fa3', font: { size: 10 } }, grid: { display: false } }, y: { ticks: { color: '#8b8fa3', callback: v => '$'+v.toLocaleString() }, grid: { color: '#1f2232' } } } }
+                });
+            }
+
+            // Cash Flow
+            if (md.balanceTimeline?.length) {
+                const tl = md.balanceTimeline;
+                charts.cashflow = new Chart(document.getElementById('cashflowChart'), {
+                    type: 'line',
+                    data: { labels: tl.map(t => { const p=t.date.split('/'); return p[0]+'/'+p[1]; }), datasets: [{ label: 'Balance', data: tl.map(t => t.balance), borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', fill: true, tension: 0.3, pointRadius: 0, pointHoverRadius: 4 }] },
+                    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8b8fa3', font: { size: 10 }, maxTicksLimit: 15 }, grid: { display: false } }, y: { ticks: { color: '#8b8fa3', callback: v => '$'+v.toLocaleString() }, grid: { color: '#1f2232' } } } }
+                });
+            }
+
+            // Category Table
+            const rows = Object.entries(md.categories).filter(([c,d]) => d.total < 0 && !['Income','Misc Income','Government'].includes(c)).sort((a,b) => a[1].total - b[1].total);
+            document.querySelector('#category-table tbody').innerHTML = rows.map(([cat, data]) => {
+                const abs = Math.abs(data.total), pct = income > 0 ? (abs/income*100) : 0;
+                let st = 'green', stl = 'On track';
+                if (pct > 30) { st = 'red'; stl = 'Critical'; }
+                else if (pct > 15) { st = 'amber'; stl = 'Review'; }
+                const txList = data.transactions.filter(t => t._amount < 0).sort((a,b) => a._amount - b._amount).slice(0,10).map(t =>
+                    `<tr class="sub-row" data-cat="${cat.replace(/[^a-zA-Z]/g,'')}"><td>${t['Transaction Date']||''}</td><td>${(t['Description 1']||'').substring(0,60)}</td><td style="color:var(--red)">$${Math.abs(t._amount).toFixed(2)}</td></tr>`
+                ).join('');
+                return `<tr><td><span class="clickable" onclick="document.querySelectorAll('.sub-row[data-cat=\\'${cat.replace(/[^a-zA-Z]/g,'')}\\']').forEach(r=>r.classList.toggle('show'))">▶ ${cat}</span></td><td style="color:var(--red)">$${abs.toFixed(2)}</td><td>${pct.toFixed(1)}%</td><td>${data.count}</td><td><span class="badge ${st}">${stl}</span></td></tr>${txList}`;
+            }).join('');
+
+            // Unknown
+            const unkTx = [...(md.categories['PayPal (Uncategorized)']?.transactions || []), ...(md.categories['Other']?.transactions || [])].filter(t => t._amount < 0).sort((a,b) => a._amount - b._amount);
+            if (unkTx.length === 0) {
+                document.getElementById('unknown-section').innerHTML = '<div class="card"><h3>🔍 Unknown Spend</h3><p style="color:var(--green);font-size:13px">✅ All transactions categorized this month!</p></div>';
+            } else {
+                const t = unkTx.reduce((s,tx) => s + Math.abs(tx._amount), 0);
+                document.getElementById('unknown-section').querySelector('p').innerHTML = `<strong>${unkTx.length} uncategorized tx</strong> totaling <strong style="color:var(--amber)">$${t.toFixed(2)}</strong>.`;
+                document.querySelector('#unknown-table tbody').innerHTML = unkTx.map(t =>
+                    `<tr><td>${t['Transaction Date']||''}</td><td>${(t['Description 1']||'').substring(0,70)}</td><td style="color:var(--red)">$${Math.abs(t._amount).toFixed(2)}</td></tr>`
+                ).join('');
+            }
+
+            // Insights
+            const insights = [];
+            if (odTx.length > 0) {
+                const s = Math.abs(odTx.reduce((a,t)=>a+t._amount,0));
+                insights.push({title:'Overdraft Alert', text:`$${s.toFixed(2)} in overdraft fees this month. Annualized: ~$${(s*12).toFixed(0)}. Keep a $100+ buffer to avoid this.`});
+            }
+            if (ppTx.length > 0) {
+                const s = ppTx.reduce((a,t)=>a+Math.abs(t._amount),0);
+                insights.push({title:'PayPal Black Hole', text:`$${s.toFixed(2)} in untracked PayPal spending (${(s/expenses*100).toFixed(1)}% of expenses). Check your PayPal activity: subscriptions? Shopping? Categorize these.`});
+            }
+            const costcoTx = (md.categories['Food & Dining']?.transactions || []).filter(t => (t['Description 1']||'').toUpperCase().includes('COSTCO'));
+            if (costcoTx.length > 0) {
+                const ct = costcoTx.reduce((a,t)=>a+Math.abs(t._amount),0);
+                insights.push({title:'Costco Spending', text:`${costcoTx.length} Costco trips totaling $${ct.toFixed(2)} (avg $${(ct/costcoTx.length).toFixed(2)}/visit).${costcoTx.length>4?' Consolidate trips to reduce impulse buys.':''}`});
+            }
+            const debt = Math.abs(md.categories['Debt Payments']?.total || 0);
+            const housing = Math.abs(md.categories['Housing']?.total || 0);
+            if (debt > 0) {
+                const ratio = income > 0 ? ((debt+housing)/income*100) : 0;
+                insights.push({title:'Debt Service', text:`Housing + debt: $${(debt+housing).toFixed(0)} (${ratio.toFixed(1)}% of income).${ratio>40?' High — aim for under 36%.':' Manageable.'}`});
+            }
+            const smallTx = md.transactions.filter(t => t._amount < 0 && Math.abs(t._amount) < 5);
+            if (smallTx.length > 5) {
+                insights.push({title:'Micro-Spending', text:`${smallTx.length} tx under $5 totaling $${smallTx.reduce((a,t)=>a+Math.abs(t._amount),0).toFixed(2)}. Small amounts add up.`});
+            }
+            document.getElementById('insights').innerHTML = insights.length > 0 ? insights.map(i => `<div class="insight-box"><h4>💡 ${i.title}</h4><p>${i.text}</p></div>`).join('') : '<p style="color:var(--text-secondary)">No insights yet. Upload more data.</p>';
+
+            // Comparison cards
+            const months = Object.keys(monthlyData).sort();
+            document.getElementById('monthly-cards').innerHTML = months.slice(-3).map(m => {
+                const d = monthlyData[m]; const n = d.income - d.expenses; const s = d.income>0?((n/d.income)*100).toFixed(1):0;
+                const od = (d.categories['Bank Fees']?.transactions || []).filter(t => (t['Description 1']||'').toUpperCase().includes('OVERDRAFT'));
+                const odc = Math.abs(od.reduce((a,t)=>a+t._amount,0));
+                return `<div class="card"><h3>${monthLabel(m)}</h3>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:var(--text-secondary)">Income</span><span style="color:var(--green)">$${d.income.toLocaleString()}</span></div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:var(--text-secondary)">Expenses</span><span style="color:var(--red)">$${d.expenses.toLocaleString()}</span></div>
+                    <div style="display:flex;justify-content:space-between;font-weight:600"><span>Net</span><span style="color:${n>=0?'var(--green)':'var(--red)'}">$${n.toLocaleString()}</span></div>
+                    <div style="font-size:12px;color:var(--text-secondary);border-top:1px solid var(--border);padding-top:8px;margin-top:8px">Savings: ${s}% · ${d.transactions.length} tx</div>
+                    ${odc>0?`<div style="margin-top:8px;padding:8px;background:var(--red-bg);border-radius:6px;font-size:11px;color:#fca5a5">🚨 $${odc.toFixed(2)} overdraft fees</div>`:''}
+                </div>`;
+            }).join('');
         }
     </script>
 </body>
