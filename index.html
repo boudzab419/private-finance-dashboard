@@ -138,6 +138,21 @@
             <div class="chart-wrap"><canvas id="cashflowChart" style="max-height:250px;"></canvas></div>
         </div>
 
+        <!-- Income Audit -->
+        <div class="card" style="margin-bottom:24px" id="income-audit-section">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                <h3 style="margin:0">🧾 Income Audit — What's Being Counted</h3>
+                <span style="font-size:12px;color:var(--text-secondary);cursor:pointer" onclick="document.getElementById('income-audit-body').classList.toggle('hidden')">Show/Hide</span>
+            </div>
+            <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px" id="income-audit-summary"></p>
+            <div class="table-wrap" id="income-audit-body">
+                <table id="income-audit-table">
+                    <thead><tr><th>Date</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
         <div class="card" style="margin-bottom:24px">
             <h3>Category Breakdown</h3>
             <div class="table-wrap">
@@ -327,6 +342,18 @@
                     options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8b8fa3', font: { size: 10 } }, grid: { display: false } }, y: { ticks: { color: '#8b8fa3', callback: v => '$'+v.toLocaleString() }, grid: { color: '#1f2232' } } } }
                 });
             }
+
+            // Income Audit
+            const incomeTx = md.transactions.filter(t => t._amount > 0).sort((a,b) => b._amount - a._amount);
+            document.getElementById('income-audit-summary').innerHTML = 
+                `<strong>${incomeTx.length} income transactions</strong> · <strong style="color:var(--green)">$${income.toLocaleString()}</strong> total · Categories: <span style="color:var(--text-secondary)">${[...new Set(incomeTx.map(t=>t._category))].sort().join(', ') || 'none'}</span>`;
+            document.querySelector('#income-audit-table tbody').innerHTML = incomeTx.map(t => {
+                const isTransfer = (t['Description 1']||'').toUpperCase().includes('TRANSFER') || (t['Description 1']||'').toUpperCase().includes('E-TRANSFER - AUTODEPOSIT');
+                const isExpensePay = (t['Description 1']||'').toUpperCase().includes('EXPENSE PAYMENT');
+                const flag = isTransfer || isExpensePay ? ' ⚠️' : '';
+                const bgStyle = (isTransfer || isExpensePay) ? 'style="background:rgba(245,158,11,0.06)"' : '';
+                return `<tr ${bgStyle}><td>${t['Transaction Date']||''}</td><td>${(t['Description 1']||'').substring(0,70)}${flag}</td><td><span class="badge green">${t._category}</span></td><td style="text-align:right;color:var(--green);font-weight:600">$${t._amount.toFixed(2)}</td></tr>`;
+            }).join('');
 
             // Cash Flow
             if (md.balanceTimeline?.length) {
