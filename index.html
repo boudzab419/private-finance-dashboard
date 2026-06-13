@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Private Finance Dashboard</title>
+    <!-- Include PapaParse for CSV parsing and Chart.js for graphs via CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 600px; margin: 0 auto; }
+        .hidden { display: none; }
+        input, button { width: 100%; padding: 10px; margin-top: 10px; box-sizing: border-box; }
+        button { background: #0070f3; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <!-- 1. PASSWORD WALL -->
+    <div id="password-wall" class="card">
+        <h2>Financial Dashboard Login</h2>
+        <input type="password" id="password-input" placeholder="Enter Master Password">
+        <button onclick="checkPassword()">Unlock Dashboard</button>
+        <p id="error-msg" style="color: red; margin-top: 10px;"></p>
+    </div>
+
+    <!-- 2. PRIVATE DASHBOARD (Hidden by default) -->
+    <div id="dashboard" class="card hidden" style="max-width: 900px;">
+        <h2>Personal Finance Analyzer</h2>
+        <p>Upload your bank CSV extract below. Your data is processed entirely in your browser and is never uploaded to a server.</p>
+        
+        <input type="file" id="csv-file" accept=".csv">
+        <button onclick="processCSV()">Analyze Statement</button>
+
+        <div id="analysis-results" class="hidden" style="margin-top: 30px;">
+            <h3>Spending Summary</h3>
+            <canvas id="financeChart" width="400" height="200"></canvas>
+            <div id="raw-data" style="margin-top: 20px;"></div>
+        </div>
+    </div>
+
+    <script>
+        // Check password against our Vercel Serverless Function
+        async function checkPassword() {
+            const password = document.getElementById('password-input').value;
+            const response = await fetch('/api/password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password })
+            });
+
+            const data = await response.json();
+            if (response.ok && data.success) {
+                document.getElementById('password-wall').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+            } else {
+                document.getElementById('error-msg').innerText = data.error || 'Access Denied';
+            }
+        }
+
+        // Parse CSV data locally using PapaParse
+        function processCSV() {
+            const fileInput = document.getElementById('csv-file');
+            if (!fileInput.files[0]) return alert("Please select a CSV file first.");
+
+            Papa.parse(fileInput.files[0], {
+                header: true,
+                dynamicTyping: true,
+                complete: function(results) {
+                    renderDashboardData(results.data);
+                }
+            });
+        }
+
+        // Handle data logic and build your spending chart
+        function renderDashboardData(data) {
+            document.getElementById('analysis-results').classList.remove('hidden');
+            
+            // Example: Simple logic assuming your CSV has "Description" and "Amount" columns
+            // You will want to tweak this mapping based on your specific bank's CSV headers
+            console.log("Parsed CSV Data:", data);
+
+            // Basic placeholder chart initialization
+            const ctx = document.getElementById('financeChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Groceries', 'Utilities', 'Entertainment', 'Other'],
+                    datasets: [{
+                        label: 'Spending by Category ($)',
+                        data: [120, 190, 30, 50], // Tweak your JS to aggregate your actual CSV totals here
+                        backgroundColor: '#0070f3'
+                    }]
+                }
+            });
+        }
+    </script>
+</body>
+</html>
