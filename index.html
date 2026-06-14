@@ -107,7 +107,7 @@ function categorize(desc,amt){
 }
 
 function getAccount(tx){return tx['Account Type']||''}
-function monthKey(d){const p=String(d).split('/');return p.length===3?`${p[2]}-${p[0].padStart(2,'0')}`:''}
+function monthKey(d){const dateObj=new Date(d);if(isNaN(dateObj))return'';return`${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}`}
 function monthLabel(k){const[y,m]=k.split('-');const M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return`${M[parseInt(m)-1]} ${y}`}
 
 async function checkPassword(){
