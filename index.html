@@ -195,15 +195,12 @@ document.addEventListener('click',function(e){
 function filterCategoryTable(){
   const q=(document.getElementById('cat-search').value||'').toUpperCase();const md=window._catData;if(!md)return;
   const summary=document.getElementById('cat-search-summary');let matchCount=0,matchSum=0;
-  if(!q){summary.style.display='none';document.querySelectorAll('#category-table tbody tr.cat-row').forEach(r=>r.style.display='');document.querySelectorAll('#category-table tbody tr.sub-row').forEach(r=>r.style.display=(r.classList.contains('show')?'':'none'));return}
+  if(!q){summary.style.display='none';document.querySelectorAll('#category-table tbody tr.cat-row').forEach(r=>r.style.display='');document.querySelectorAll('#category-table tbody tr.sub-row').forEach(r=>{r.style.display=(r.classList.contains('show')?'':'none')});return}
   summary.style.display='block';
-  document.querySelectorAll('#category-table tbody tr').forEach(r=>{
-    if(r.classList.contains('cat-row')){
-      const catName=r.dataset.catname||'';const cleanCat=catName.replace(/[^A-Z]/g,'');
-      const subs=document.querySelectorAll(`.sub-row[data-cat="${cleanCat}"]`);let hasMatch=false;
-      subs.forEach(sr=>{const desc=sr.dataset.desc||'';if(desc.includes(q)){sr.style.display='';sr.classList.add('show');hasMatch=true;matchCount++;const amtTxt=sr.querySelector('td:last-child')?.textContent||'0';matchSum+=Math.abs(parseFloat(amtTxt.replace(/[^0-9.-]/g,''))||0)}else{sr.style.display='none';sr.classList.remove('show')}});
-      if(hasMatch||catName.includes(q))r.style.display='';else r.style.display='none';
-    }
+  document.querySelectorAll('#category-table tbody tr.cat-row').forEach(r=>{
+    const cid=r.dataset.cid;const catName=r.dataset.catname||'';const subs=document.querySelectorAll(`.sub-row[data-cat="${cid}"]`);let hasMatch=false;
+    subs.forEach(sr=>{const desc=sr.dataset.desc||'';if(desc.includes(q)){sr.style.display='';sr.classList.add('show');hasMatch=true;matchCount++;const amtTxt=sr.querySelector('td:last-child')?.textContent||'0';matchSum+=Math.abs(parseFloat(amtTxt.replace(/[^0-9.-]/g,''))||0)}else{sr.style.display='none';sr.classList.remove('show')}});
+    if(hasMatch||catName.includes(q))r.style.display='';else r.style.display='none';
   });
   summary.innerHTML=`🔍 <strong>${matchCount}</strong> matching transactions · Total: <strong style="color:var(--red)">$${matchSum.toFixed(2)}</strong>`;
 }
