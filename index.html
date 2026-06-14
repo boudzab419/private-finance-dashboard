@@ -121,6 +121,8 @@ function handleFileUpload(input){
 }
 
 function processData(data){
+  // Trim whitespace from column headers (common in bank CSV exports)
+  if(data.length>0){data=data.map(r=>{const t={};for(const k of Object.keys(r)){t[k.trim()]=r[k]}return t})}
   allData=data.filter(r=>r['Transaction Date']&&!isNaN(r['CAD$']));
   monthlyData={};
   allData.forEach(tx=>{
