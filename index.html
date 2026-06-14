@@ -195,7 +195,7 @@ document.addEventListener('click',function(e){
 function filterCategoryTable(){
   const q=(document.getElementById('cat-search').value||'').toUpperCase();const md=window._catData;if(!md)return;
   const summary=document.getElementById('cat-search-summary');let matchCount=0,matchSum=0;
-  if(!q){summary.style.display='none';document.querySelectorAll('#category-table tbody tr.cat-row').forEach(r=>r.style.display='');document.querySelectorAll('#category-table tbody tr.sub-row').forEach(r=>{r.classList.remove('show');r.style.display='none'});return}
+if(!q){summary.style.display='none';document.querySelectorAll('#category-table tbody tr.cat-row').forEach(r=>r.style.display='');document.querySelectorAll('#category-table tbody tr.sub-row').forEach(r=>{r.classList.remove('show');r.style.display=''});return}
   summary.style.display='block';
   document.querySelectorAll('#category-table tbody tr.cat-row').forEach(r=>{
     const cid=r.dataset.cid;const catName=r.dataset.catname||'';const subs=document.querySelectorAll(`.sub-row[data-cat="${cid}"]`);let hasMatch=false;
