@@ -73,22 +73,23 @@ const CATEGORIES = [
   ['Bank Fees / Interest', ['CHQ PRINTING FEE','OD INTEREST','OD HANDLING FEE','MONTHLY FEE','PURCHASE INTEREST','OVERDRAFT']],
   ['Groceries', ['SOBEYS','REAL CDN. SUPERSTORE','CALG CO-OP GROCERY','COSTCO','WALMART.CA','WALMART DELIVERY','COSTCO WHOLESAL','WALMART']],
   ['Shopping / Discount Retail', ['DOLLARAMA','BIANCA AMORS','SHOPPERS DRUG','DYNAMITE','ESSENCE WELLNES']],
-  ['Shopping / Online Retail', ['AMZN','AMAZON','MKTPL','TEMU']],
-  ['Kids / Education', ["MABEL'S LABELS",'GIRL GUIDES','JJ SCHOOL','ZEFFY','CREATIONS CHILDCARE','CREATIONS CHILD CARE']],
-  ['Kids / Family Recreation', ['TREEHOUSE CALGARY','ROYAL CANADIAN CIRCUS','KIDSBOWLFRE']],
+  ['Shopping / Online Retail', ['AMZN','AMAZON','MKTPL','TEMU','AFTERPAY']],
+  ['Kids / Education', ["MABEL'S LABELS",'GIRL GUIDES','JJ SCHOOL','ZEFFY','CREATIONS CHILDCARE','CREATIONS CHILD CARE','TEACHERSPAY']],
+  ['Kids / Family Recreation', ['TREEHOUSE CALGARY','ROYAL CANADIAN CIRCUS','KIDSBOWLFRE','DAWGS BASEBAL']],
   ['Services / Outsourcing', ['TASKRABBIT']],
-  ['Home Improvement / Lawn', ['SITEONE LANDSCAPE']],
-  ['Food & Dining / Fast Food', ['TIM HORTONS',"MCDONALD'S",'MCDONALD','BOOSTER JUICE','ONA CAFE','PITA BASKET','LITTLE CAESARS','KFC',"MARY BROWN'S"]],
+  ['Home Improvement / Lawn', ['SITEONE LANDSCAPE','HOME DEPOT']],
+  ['Food & Dining / Fast Food', ['TIM HORTONS',"MCDONALD'S",'MCDONALD','BOOSTER JUICE','ONA CAFE','PITA BASKET','LITTLE CAESARS','KFC',"MARY BROWN'S",'LESHINSKYS','7-ELEVEN']],
   ['Food & Dining / Restaurants', ['CILANTRO AND CHIVE','MR MIKES','DIXONS PUBLIC HOUSE','LIGHTHOUSE PUB','LETO STEAK','KINJO SUSHI','BLINDMAN BREWING','GRIZZLY PAW BREW']],
   ['Liquor / Wine', ['SPIRIT HILLS WINERY','ACE LIQUOR']],
   ['Gaming & Entertainment', ['PLAYSTATION','CODASHOP','EFHUB','ACE STREAM','GAMIVO.COM']],
   ['Streaming Subscriptions', ['NETFLIX.COM','CBC GEM']],
   ['AI Tools & Software', ['DEEPSEEK']],
-  ['Transportation', ['GARAGE AVENUE MECHANIC','TIRES','CAR AUDIO','GAS','ESSO','SHELL','PETRO']],
-  ['Health & Wellness', ['MASSAGE ADDICT','PHARMACY','IMPACT ORTHO']],
+  ['Transportation', ['GARAGE AVENUE MECHANIC','TIRES','CAR AUDIO','GAS','ESSO','SHELL','PETRO','BIG DARS']],
+  ['Health & Wellness', ['MASSAGE ADDICT','PHARMACY','IMPACT ORTHO','ALLIANCE BJJ']],
   ['Charity', ['WORLD VISION']],
   ['Government', ['GOVERNMENT OF ALBERTA']],
   ['Crypto', ['SHAKEAPY CRYPTO']],
+  ['Utilities / Security', ['RING MULTI','RING SOLO','RING.COM']],
   ['Transfers', ['E-TRANSFER SENT','ATM WITHDRAWAL','ONLINE TRANSFER TO DEPOSIT']],
   ['PayPal (Uncategorized)', ['PAYPAL']]
 ];
@@ -96,7 +97,9 @@ const CATEGORIES = [
 function categorize(desc,amt){
   const d=(desc||'').toUpperCase();
   if(d.includes('WWW TFR')||d.includes('EMAIL TRFS CAN')||d.includes('EMAIL TRFS')||d.includes('ONLINE BANKING TRANSFER')||d.includes('ONLINE TRANSFER'))return'Internal Account Transfers';
+  if(d.includes('MISC PAYMENT')&&Math.abs(amt)===12291.75)return'Internal Account Transfers';
   if((d.includes('MISC PAYMENT')||d.includes('AUTOMATIC PAYMENT')||d==='PAYMENT')&&amt>0)return'Income / Card Credit Payment';
+  if((d==='WITHDRAWAL'||d==='PAYMENT')&&amt<0)return'Fixed Outflow (Unmapped)';
   for(const[cat,keywords]of CATEGORIES){for(const kw of keywords){if(d.includes(kw.toUpperCase()))return cat;}}
   if(amt<0)return'Fixed Outflow (Unmapped)';
   if(amt>0)return'Income';
