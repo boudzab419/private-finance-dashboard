@@ -21,9 +21,6 @@
         .header select,.header button{padding:8px 16px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--card-bg);color:var(--text);font-size:13px;cursor:pointer;outline:none}
         .header select:hover,.header button:hover{border-color:var(--accent)}.header .upload-btn{background:var(--accent);border-color:var(--accent);font-weight:600}
         .header .upload-btn:hover{background:var(--accent-hover)}
-        #csv-stats{display:none;padding:8px 16px;margin-bottom:16px;border-radius:8px;background:var(--card-bg);font-size:12px;color:var(--text-secondary);border:1px solid var(--border)}
-        #csv-stats.error{color:#fca5a5;border-color:var(--red);background:var(--red-bg)}
-        #csv-stats.success{color:#6ee7b7;border-color:var(--green)}
         .kpi-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
         .kpi{background:var(--card-bg);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}
         .kpi .label{font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);margin-bottom:6px}
@@ -52,7 +49,6 @@
 <div id="password-wall" class="password-wall"><div class="card"><h1>🔐 Finance Dashboard</h1><p>Enter your master password to continue</p><input type="password" id="password-input" placeholder="Password" onkeydown="if(event.key=='Enter')checkPassword()"><button onclick="checkPassword()">Unlock</button><p id="error-msg" class="error"></p></div></div>
 <div id="app" class="app">
 <div class="header"><h1>📊 Finance Intelligence</h1><div class="controls"><button class="upload-btn" onclick="document.getElementById('file-input').click()">📂 Upload CSV</button><input type="file" id="file-input" accept=".csv" onchange="handleFileUpload(this)"><select id="month-select" onchange="renderAll()"></select></div></div>
-<div id="csv-stats"></div>
 <div class="kpi-bar" id="kpi-bar"></div><div class="alerts" id="alerts"></div>
 <div class="grid-2"><div class="card"><h3>Expense Breakdown</h3><div class="chart-wrap"><canvas id="expenseChart"></canvas></div></div><div class="card"><h3>Income Sources</h3><div class="chart-wrap"><canvas id="incomeChart"></canvas></div></div></div>
 <div class="card" style="margin-bottom:24px"><h3>Cash Flow Timeline</h3><div class="chart-wrap"><canvas id="cashflowChart" style="max-height:250px;"></canvas></div></div>
@@ -64,35 +60,6 @@
 <div class="grid-3" id="monthly-cards" style="margin-bottom:24px"></div></div>
 <script>
 let allData=[],monthlyData={},charts={},selectedMonth=null,excludedIncomeKeys=new Set();
-
-// Auto-detect column names (case-insensitive)
-let COL_DATE='',COL_AMT='',COL_DESC='',COL_ACCT='';
-
-function detectColumns(cols) {
-  COL_DATE='';COL_AMT='';COL_DESC='';COL_ACCT='';
-  for (const c of cols) {
-    const cl=c.toLowerCase().trim();
-    if (!COL_DATE && (cl.includes('date') || cl==='date')) COL_DATE=c;
-    if (!COL_AMT && (cl.includes('cad') || cl==='cad$' || cl.includes('amount'))) COL_AMT=c;
-    if (!COL_DESC && (cl.includes('desc') || cl.includes('description'))) COL_DESC=c;
-    if (!COL_ACCT && (cl.includes('account') || cl.includes('acct'))) COL_ACCT=c;
-  }
-  // Fallbacks
-  if (!COL_DESC) COL_DESC=cols.find(c=>c.toLowerCase().includes('desc'))||'Description 1';
-  if (!COL_ACCT) COL_ACCT=cols.find(c=>c.toLowerCase().includes('account'))||'Account Type';
-  if (!COL_DATE) COL_DATE=cols.find(c=>c.toLowerCase().includes('date'))||'Transaction Date';
-  if (!COL_AMT) COL_AMT=cols.find(c=>c.toLowerCase().includes('cad'))||'CAD$';
-}
-
-function parseAmount(v) {
-  if (typeof v==='number') return v;
-  if (typeof v==='string') {
-    const cleaned=v.replace(/[$,]/g,'').trim();
-    const n=parseFloat(cleaned);
-    return isNaN(n)?null:n;
-  }
-  return null;
-}
 
 const CATEGORIES = [
   ['Internal Account Transfers', ['WWW TFR','TRANSFER','EMAIL TRFS','EMAIL TRFS CAN','ONLINE BANKING TRANSFER','ONLINE TRANSFER']],
@@ -139,7 +106,7 @@ function categorize(desc,amt){
   return'Other';
 }
 
-function getAccount(tx){return tx[COL_ACCT]||tx['Account Type']||''}
+function getAccount(tx){return tx['Account Type']||''}
 function monthKey(d){const p=String(d).split('/');return p.length===3?`${p[2]}-${p[0].padStart(2,'0')}`:''}
 function monthLabel(k){const[y,m]=k.split('-');const M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return`${M[parseInt(m)-1]} ${y}`}
 
@@ -150,54 +117,17 @@ async function checkPassword(){
 
 function handleFileUpload(input){
   if(!input.files[0])return;
-  Papa.parse(input.files[0],{header:true,dynamicTyping:false,skipEmptyLines:true,complete:function(r){processData(r.data,r.meta.fields||[])},error:function(e){alert('CSV parse error: '+e.message)}});
+  Papa.parse(input.files[0],{header:true,dynamicTyping:true,skipEmptyLines:true,complete:function(r){processData(r.data)},error:function(e){alert('CSV parse error: '+e.message)}});
 }
 
-function processData(data,fields){
-  const stats=document.getElementById('csv-stats');
-  const totalRows=data.length;
-
-  // Detect columns
-  detectColumns(fields||Object.keys(data[0]||{}));
-
-  // Diagnose missing columns
-  if(!COL_DATE || !COL_AMT) {
-    stats.style.display='block';
-    stats.className='error';
-    const found=fields?fields.join(', '):'none';
-    stats.innerHTML=`⚠️ <strong>CSV load failed.</strong> Found columns: ${found}. Need columns containing "date" and "CAD" (case-insensitive). Detected: date=${COL_DATE||'NOT FOUND'}, amount=${COL_AMT||'NOT FOUND'}`;
-    return;
-  }
-
-  // Filter valid rows with flexible column names + robust amount parsing
-  allData=data.filter(r=>{
-    const d=r[COL_DATE];
-    if(!d) return false;
-    const amt=parseAmount(r[COL_AMT]);
-    if(amt===null) return false;
-    r._parsedAmt=amt;
-    return true;
-  });
-
-  const validRows=allData.length;
-  const skippedRows=totalRows-validRows;
-
-  // Show stats
-  stats.style.display='block';
-  if (validRows===0) {
-    stats.className='error';
-    stats.innerHTML=`⚠️ <strong>0 valid rows</strong> loaded from ${totalRows} total rows. Columns: date=${COL_DATE}, amount=${COL_AMT}. Check date format (M/D/YYYY) and that amount column doesn't contain $ symbols.`;
-    return;
-  }
-  stats.className='success';
-  stats.innerHTML=`✅ <strong>${validRows.toLocaleString()}</strong> rows loaded${skippedRows>0?` (${skippedRows} skipped)`:''} · Date: <strong>${COL_DATE}</strong> · Amount: <strong>${COL_AMT}</strong>`;
-
+function processData(data){
+  allData=data.filter(r=>r['Transaction Date']&&!isNaN(r['CAD$']));
   monthlyData={};
   allData.forEach(tx=>{
-    const mk=monthKey(tx[COL_DATE]);if(!mk)return;
+    const mk=monthKey(tx['Transaction Date']);if(!mk)return;
     if(!monthlyData[mk])monthlyData[mk]={income:0,expenses:0,categories:{},transactions:[]};
-    const amt=tx._parsedAmt;
-    tx._category=categorize(tx[COL_DESC]||tx['Description 1']||'',amt);tx._amount=amt;tx._monthKey=mk;
+    const amt=tx['CAD$']||0;
+    tx._category=categorize(tx['Description 1']||'',amt);tx._amount=amt;tx._monthKey=mk;
     const fc=tx._category;
     if(fc==='Internal Account Transfers'){/* SKIP from totals */}
     else if(amt>0){monthlyData[mk].income+=amt}
@@ -206,12 +136,12 @@ function processData(data,fields){
     monthlyData[mk].categories[fc].total+=amt;monthlyData[mk].categories[fc].count++;monthlyData[mk].categories[fc].transactions.push(tx);monthlyData[mk].transactions.push(tx);
   });
   for(const[mk,md]of Object.entries(monthlyData)){
-let bal=0;const s=[...md.transactions].sort((a,b)=>new Date(a[COL_DATE]||0)-new Date(b[COL_DATE]||0));md.balanceTimeline=[];s.forEach(tx=>{bal+=tx._amount;md.balanceTimeline.push({date:tx[COL_DATE],balance:bal})});
+let bal=0;const s=[...md.transactions].sort((a,b)=>new Date(a['Transaction Date']||0)-new Date(b['Transaction Date']||0));md.balanceTimeline=[];s.forEach(tx=>{bal+=tx._amount;md.balanceTimeline.push({date:tx['Transaction Date'],balance:bal})});
   }
   const allTxFlat=[];Object.entries(monthlyData).forEach(([m,md])=>{md.transactions.forEach(t=>allTxFlat.push(t))});
   const allMd={income:0,expenses:0,categories:{},transactions:allTxFlat};
   allTxFlat.forEach(tx=>{if(tx._category==='Internal Account Transfers')return;if(tx._amount>0)allMd.income+=tx._amount;else allMd.expenses+=Math.abs(tx._amount);if(!allMd.categories[tx._category])allMd.categories[tx._category]={total:0,count:0,transactions:[]};allMd.categories[tx._category].total+=tx._amount;allMd.categories[tx._category].count++;allMd.categories[tx._category].transactions.push(tx)});
-  let ab=0;const as=[...allTxFlat].sort((a,b)=>new Date(a[COL_DATE]||0)-new Date(b[COL_DATE]||0));allMd.balanceTimeline=[];as.forEach(tx=>{ab+=tx._amount;allMd.balanceTimeline.push({date:tx[COL_DATE],balance:ab})});
+  let ab=0;const as=[...allTxFlat].sort((a,b)=>new Date(a['Transaction Date']||0)-new Date(b['Transaction Date']||0));allMd.balanceTimeline=[];as.forEach(tx=>{ab+=tx._amount;allMd.balanceTimeline.push({date:tx['Transaction Date'],balance:ab})});
   monthlyData['__all__']=allMd;
   const months=Object.keys(monthlyData).filter(k=>k!=='__all__').sort();const sel=document.getElementById('month-select');sel.innerHTML=months.map(m=>`<option value="${m}">${monthLabel(m)}</option>`).join('')+'<option value="__all__">📆 All Months</option>';if(months.length>0){selectedMonth=months[months.length-1];sel.value=selectedMonth}renderAll();
 }
@@ -222,13 +152,13 @@ function toggleIncomeExclusion(key,ex){if(ex)excludedIncomeKeys.add(key);else ex
 function renderAll(){
   selectedMonth=document.getElementById('month-select').value||selectedMonth;if(!selectedMonth||!monthlyData[selectedMonth])return;destroyCharts();const md=monthlyData[selectedMonth];window._catData=md;
   const income=md.income,expenses=md.expenses,net=income-expenses;const sr=income>0?((net/income)*100):0;
-  const odTx=(md.categories['Bank Fees / Interest']?.transactions||[]).filter(t=>((t[COL_DESC]||t['Description 1']||'')).toUpperCase().includes('OVERDRAFT'));
+  const odTx=(md.categories['Bank Fees / Interest']?.transactions||[]).filter(t=>(t['Description 1']||'').toUpperCase().includes('OVERDRAFT'));
   document.getElementById('kpi-bar').innerHTML=`<div class="kpi"><div class="label">Total Income</div><div class="value green">$${income.toLocaleString()}</div></div><div class="kpi"><div class="label">Total Expenses</div><div class="value red">$${expenses.toLocaleString()}</div></div><div class="kpi"><div class="label">Net</div><div class="value ${net>=0?'green':'red'}">$${net.toLocaleString()}</div><div class="sub">${sr.toFixed(1)}% savings rate</div></div><div class="kpi"><div class="label">Transactions</div><div class="value">${md.transactions.length}</div><div class="sub">${odTx.length} od fees · $${Math.abs(odTx.reduce((s,t)=>s+t._amount,0)).toFixed(0)}</div></div>`;
 
   const alerts=[];
   if(odTx.length>0){const s=Math.abs(odTx.reduce((a,t)=>a+t._amount,0));alerts.push({type:'red',icon:'🚨',text:`<strong>$${s.toFixed(2)}</strong> in overdraft fees (${odTx.length} charges). At this rate: <strong>~$${(s*12).toFixed(0)}/year</strong>. A $500 buffer would eliminate this.`})}
   const ppTx=(md.categories['PayPal (Uncategorized)']?.transactions||[]).filter(t=>t._amount<0);if(ppTx.length>0){const s=ppTx.reduce((a,t)=>a+Math.abs(t._amount),0);alerts.push({type:'amber',icon:'⚠️',text:`Unknown PayPal: <strong>$${s.toFixed(2)}</strong> across ${ppTx.length} tx (${(s/expenses*100).toFixed(1)}% of expenses). Completely opaque — tag these.`})}
-  const mfTx=(md.categories['Bank Fees / Interest']?.transactions||[]).filter(t=>((t[COL_DESC]||t['Description 1']||'')).toUpperCase().includes('MONTHLY FEE'));if(mfTx.length>0){alerts.push({type:'amber',icon:'🏦',text:`Monthly banking fee: <strong>$${Math.abs(mfTx.reduce((a,t)=>a+t._amount,0)).toFixed(2)}</strong>. Many accounts waive this with a minimum balance.`})}
+  const mfTx=(md.categories['Bank Fees / Interest']?.transactions||[]).filter(t=>(t['Description 1']||'').toUpperCase().includes('MONTHLY FEE'));if(mfTx.length>0){alerts.push({type:'amber',icon:'🏦',text:`Monthly banking fee: <strong>$${Math.abs(mfTx.reduce((a,t)=>a+t._amount,0)).toFixed(2)}</strong>. Many accounts waive this with a minimum balance.`})}
   document.getElementById('alerts').innerHTML=alerts.map(a=>`<div class="alert ${a.type}"><span class="icon">${a.icon}</span><span>${a.text}</span></div>`).join('');
 
   const cats=Object.entries(md.categories).filter(([c,d])=>d.total<0&&!['Income','Income / Tax Returns','Income / Card Credit Payment','Government'].includes(c)).sort((a,b)=>a[1].total-b[1].total);
@@ -238,26 +168,26 @@ function renderAll(){
 
   const incomeAll=md.transactions.filter(t=>t._amount>0).sort((a,b)=>b._amount-a._amount);let effInc=0;incomeAll.forEach((t,i)=>{if(!excludedIncomeKeys.has(`${selectedMonth}_${i}`))effInc+=t._amount});
   document.getElementById('income-audit-summary').innerHTML=`<strong>${incomeAll.length} income tx</strong> · <strong style="color:var(--green)">$${effInc.toLocaleString()}</strong> effective ($${income.toLocaleString()} raw) · <button style="margin-left:8px;padding:2px 10px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--text-secondary);cursor:pointer" onclick="excludedIncomeKeys.clear();renderAll()">Reset All</button>`;
-  document.querySelector('#income-audit-table tbody').innerHTML=incomeAll.map((t,i)=>{const key=`${selectedMonth}_${i}`;const desc=(t[COL_DESC]||t['Description 1']||'');const isXfer=desc.toUpperCase().includes('TRANSFER')||desc.toUpperCase().includes('E-TRANSFER - AUTODEPOSIT');const flag=isXfer?' ⚠️':'';const isEx=excludedIncomeKeys.has(key);const acct=getAccount(t);return`<tr ${isEx?'style="opacity:0.35"':''}><td style="text-align:center"><input type="checkbox" ${isEx?'checked':''} onchange="toggleIncomeExclusion('${key}',this.checked)" style="cursor:pointer;accent-color:var(--accent)"></td><td>${t[COL_DATE]||''}</td><td style="font-size:11px;color:var(--text-secondary)">${acct}</td><td>${desc.substring(0,60)}${flag}</td><td><span class="badge green">${t._category}</span></td><td style="text-align:right;color:${isEx?'var(--text-secondary)':'var(--green)'};font-weight:600">$${t._amount.toFixed(2)}</td></tr>`}).join('');
+  document.querySelector('#income-audit-table tbody').innerHTML=incomeAll.map((t,i)=>{const key=`${selectedMonth}_${i}`;const isXfer=(t['Description 1']||'').toUpperCase().includes('TRANSFER')||(t['Description 1']||'').toUpperCase().includes('E-TRANSFER - AUTODEPOSIT');const flag=isXfer?' ⚠️':'';const isEx=excludedIncomeKeys.has(key);const acct=getAccount(t);return`<tr ${isEx?'style="opacity:0.35"':''}><td style="text-align:center"><input type="checkbox" ${isEx?'checked':''} onchange="toggleIncomeExclusion('${key}',this.checked)" style="cursor:pointer;accent-color:var(--accent)"></td><td>${t['Transaction Date']||''}</td><td style="font-size:11px;color:var(--text-secondary)">${acct}</td><td>${(t['Description 1']||'').substring(0,60)}${flag}</td><td><span class="badge green">${t._category}</span></td><td style="text-align:right;color:${isEx?'var(--text-secondary)':'var(--green)'};font-weight:600">$${t._amount.toFixed(2)}</td></tr>`}).join('');
 
   if(md.balanceTimeline?.length){const tl=md.balanceTimeline;charts.cashflow=new Chart(document.getElementById('cashflowChart'),{type:'line',data:{labels:tl.map(t=>{const p=String(t.date).split('/');return p[0]+'/'+p[1]}),datasets:[{label:'Balance',data:tl.map(t=>t.balance),borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,0.1)',fill:true,tension:0.3,pointRadius:0,pointHoverRadius:4}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#8b8fa3',font:{size:10},maxTicksLimit:15},grid:{display:false}},y:{ticks:{color:'#8b8fa3',callback:v=>'$'+v.toLocaleString()},grid:{color:'#1f2232'}}}}})}
 
   // Category Table with proper event delegation
   let catId=0;
   const rows=Object.entries(md.categories).filter(([c,d])=>d.total<0&&!['Income','Income / Tax Returns','Income / Card Credit Payment','Government'].includes(c)).sort((a,b)=>a[1].total-b[1].total);
-  document.querySelector('#category-table tbody').innerHTML=rows.map(([cat,data])=>{const cid='cat'+catId++;const accts=[...new Set(data.transactions.filter(t=>t._amount<0).map(t=>getAccount(t)).filter(Boolean))].slice(0,3).join(', ')||'—';const abs=Math.abs(data.total),pct=income>0?(abs/income*100):0;let st='green',stl='On track';if(pct>30){st='red';stl='Critical'}else if(pct>15){st='amber';stl='Review'}const txList=data.transactions.filter(t=>t._amount<0).sort((a,b)=>a._amount-b._amount).map(t=>{const desc=((t[COL_DESC]||t['Description 1']||'').toUpperCase()).replace(/"/g,'"');return`<tr class="sub-row" data-cat="${cid}" data-desc="${desc}"><td>${t[COL_DATE]||''}</td><td style="font-size:11px;color:var(--text-secondary)">${getAccount(t)}</td><td>${(t[COL_DESC]||t['Description 1']||'').substring(0,55)}</td><td style="color:var(--red)">$${Math.abs(t._amount).toFixed(2)}</td></tr>`}).join('');return`<tr class="cat-row" data-cid="${cid}" data-catname="${cat.toUpperCase().replace(/"/g,'"')}"><td><span class="clickable cat-toggle" data-cid="${cid}">▶ ${cat}</span></td><td style="font-size:11px;color:var(--text-secondary);max-width:140px">${accts}</td><td style="color:var(--red)">$${abs.toFixed(2)}</td><td>${pct.toFixed(1)}%</td><td>${data.count}</td><td><span class="badge ${st}">${stl}</span></td></tr>${txList}`}).join('');
+  document.querySelector('#category-table tbody').innerHTML=rows.map(([cat,data])=>{const cid='cat'+catId++;const accts=[...new Set(data.transactions.filter(t=>t._amount<0).map(t=>getAccount(t)).filter(Boolean))].slice(0,3).join(', ')||'—';const abs=Math.abs(data.total),pct=income>0?(abs/income*100):0;let st='green',stl='On track';if(pct>30){st='red';stl='Critical'}else if(pct>15){st='amber';stl='Review'}const txList=data.transactions.filter(t=>t._amount<0).sort((a,b)=>a._amount-b._amount).map(t=>`<tr class="sub-row" data-cat="${cid}" data-desc="${(t['Description 1']||'').toUpperCase().replace(/"/g,'"')}"><td>${t['Transaction Date']||''}</td><td style="font-size:11px;color:var(--text-secondary)">${getAccount(t)}</td><td>${(t['Description 1']||'').substring(0,55)}</td><td style="color:var(--red)">$${Math.abs(t._amount).toFixed(2)}</td></tr>`).join('');return`<tr class="cat-row" data-cid="${cid}" data-catname="${cat.toUpperCase().replace(/"/g,'"')}"><td><span class="clickable cat-toggle" data-cid="${cid}">▶ ${cat}</span></td><td style="font-size:11px;color:var(--text-secondary);max-width:140px">${accts}</td><td style="color:var(--red)">$${abs.toFixed(2)}</td><td>${pct.toFixed(1)}%</td><td>${data.count}</td><td><span class="badge ${st}">${stl}</span></td></tr>${txList}`}).join('');
 
   const unkTx=[...(md.categories['PayPal (Uncategorized)']?.transactions||[]),...(md.categories['Fixed Outflow (Unmapped)']?.transactions||[]),...(md.categories['Other']?.transactions||[])].filter(t=>t._amount<0).sort((a,b)=>a._amount-b._amount);
-  if(unkTx.length===0){document.getElementById('unknown-section').innerHTML='<div class="card"><h3>🔍 Unknown Spend</h3><p style="color:var(--green);font-size:13px">✅ All transactions categorized this month!</p></div>'}else{const t=unkTx.reduce((s,tx)=>s+Math.abs(tx._amount),0);document.getElementById('unknown-section').querySelector('p').innerHTML=`<strong>${unkTx.length} uncategorized tx</strong> totaling <strong style="color:var(--amber)">$${t.toFixed(2)}</strong>.`;document.querySelector('#unknown-table tbody').innerHTML=unkTx.map(t=>`<tr><td>${t[COL_DATE]||''}</td><td style="font-size:11px;color:var(--text-secondary)">${getAccount(t)}</td><td>${(t[COL_DESC]||t['Description 1']||'').substring(0,60)}</td><td style="color:var(--red)">$${Math.abs(t._amount).toFixed(2)}</td></tr>`).join('')}
+  if(unkTx.length===0){document.getElementById('unknown-section').innerHTML='<div class="card"><h3>🔍 Unknown Spend</h3><p style="color:var(--green);font-size:13px">✅ All transactions categorized this month!</p></div>'}else{const t=unkTx.reduce((s,tx)=>s+Math.abs(tx._amount),0);document.getElementById('unknown-section').querySelector('p').innerHTML=`<strong>${unkTx.length} uncategorized tx</strong> totaling <strong style="color:var(--amber)">$${t.toFixed(2)}</strong>.`;document.querySelector('#unknown-table tbody').innerHTML=unkTx.map(t=>`<tr><td>${t['Transaction Date']||''}</td><td style="font-size:11px;color:var(--text-secondary)">${getAccount(t)}</td><td>${(t['Description 1']||'').substring(0,60)}</td><td style="color:var(--red)">$${Math.abs(t._amount).toFixed(2)}</td></tr>`).join('')}
 
-  const insights=[];if(odTx.length>0){const s=Math.abs(odTx.reduce((a,t)=>a+t._amount,0));insights.push({title:'Overdraft Alert',text:`$${s.toFixed(2)} in overdraft fees this month. Annualized: ~$${(s*12).toFixed(0)}. Keep a $100+ buffer to avoid this.`})}if(ppTx.length>0){const s=ppTx.reduce((a,t)=>a+Math.abs(t._amount),0);insights.push({title:'PayPal Black Hole',text:`$${s.toFixed(2)} in untracked PayPal spending (${(s/expenses*100).toFixed(1)}% of expenses). Check your PayPal activity: subscriptions? Shopping? Categorize these.`})}const costcoTx=(md.categories['Groceries']?.transactions||[]).filter(t=>((t[COL_DESC]||t['Description 1']||'')).toUpperCase().includes('COSTCO'));if(costcoTx.length>0){const ct=costcoTx.reduce((a,t)=>a+Math.abs(t._amount),0);insights.push({title:'Costco Spending',text:`${costcoTx.length} Costco trips totaling $${ct.toFixed(2)} (avg $${(ct/costcoTx.length).toFixed(2)}/visit).${costcoTx.length>4?' Consolidate trips to reduce impulse buys.':''}`})}const debt=Math.abs(md.categories['Debt Payments']?.total||0);const housing=Math.abs(md.categories['Housing']?.total||0);if(debt>0){const ratio=income>0?((debt+housing)/income*100):0;insights.push({title:'Debt Service',text:`Housing + debt: $${(debt+housing).toFixed(0)} (${ratio.toFixed(1)}% of income).${ratio>40?' High — aim for under 36%.':' Manageable.'}`})}const smallTx=md.transactions.filter(t=>t._amount<0&&Math.abs(t._amount)<5);if(smallTx.length>5){insights.push({title:'Micro-Spending',text:`${smallTx.length} tx under $5 totaling $${smallTx.reduce((a,t)=>a+Math.abs(t._amount),0).toFixed(2)}. Small amounts add up.`})}
+  const insights=[];if(odTx.length>0){const s=Math.abs(odTx.reduce((a,t)=>a+t._amount,0));insights.push({title:'Overdraft Alert',text:`$${s.toFixed(2)} in overdraft fees this month. Annualized: ~$${(s*12).toFixed(0)}. Keep a $100+ buffer to avoid this.`})}if(ppTx.length>0){const s=ppTx.reduce((a,t)=>a+Math.abs(t._amount),0);insights.push({title:'PayPal Black Hole',text:`$${s.toFixed(2)} in untracked PayPal spending (${(s/expenses*100).toFixed(1)}% of expenses). Check your PayPal activity: subscriptions? Shopping? Categorize these.`})}const costcoTx=(md.categories['Groceries']?.transactions||[]).filter(t=>(t['Description 1']||'').toUpperCase().includes('COSTCO'));if(costcoTx.length>0){const ct=costcoTx.reduce((a,t)=>a+Math.abs(t._amount),0);insights.push({title:'Costco Spending',text:`${costcoTx.length} Costco trips totaling $${ct.toFixed(2)} (avg $${(ct/costcoTx.length).toFixed(2)}/visit).${costcoTx.length>4?' Consolidate trips to reduce impulse buys.':''}`})}const debt=Math.abs(md.categories['Debt Payments']?.total||0);const housing=Math.abs(md.categories['Housing']?.total||0);if(debt>0){const ratio=income>0?((debt+housing)/income*100):0;insights.push({title:'Debt Service',text:`Housing + debt: $${(debt+housing).toFixed(0)} (${ratio.toFixed(1)}% of income).${ratio>40?' High — aim for under 36%.':' Manageable.'}`})}const smallTx=md.transactions.filter(t=>t._amount<0&&Math.abs(t._amount)<5);if(smallTx.length>5){insights.push({title:'Micro-Spending',text:`${smallTx.length} tx under $5 totaling $${smallTx.reduce((a,t)=>a+Math.abs(t._amount),0).toFixed(2)}. Small amounts add up.`})}
   document.getElementById('insights').innerHTML=insights.length>0?insights.map(i=>`<div class="insight-box"><h4>💡 ${i.title}</h4><p>${i.text}</p></div>`).join(''):'<p style="color:var(--text-secondary)">No insights yet. Upload more data.</p>';
 
-  const allTx=[...md.transactions].sort((a,b)=>new Date(a[COL_DATE]||0)-new Date(b[COL_DATE]||0));const srcAvail=[...new Set(allTx.map(t=>getAccount(t)).filter(Boolean))].sort();let rf=window._rawFilter||'All';if(!srcAvail.includes(rf)&&rf!=='All')rf='All';window._rawFilter=rf;
+  const allTx=[...md.transactions].sort((a,b)=>new Date(a['Transaction Date']||0)-new Date(b['Transaction Date']||0));const srcAvail=[...new Set(allTx.map(t=>getAccount(t)).filter(Boolean))].sort();let rf=window._rawFilter||'All';if(!srcAvail.includes(rf)&&rf!=='All')rf='All';window._rawFilter=rf;
   document.getElementById('source-filters').innerHTML=`<button onclick="window._rawFilter='All';renderAll()" style="padding:4px 14px;border-radius:20px;border:1px solid var(--border);background:${rf==='All'?'var(--accent)':'transparent'};color:${rf==='All'?'white':'var(--text-secondary)'};font-size:11px;cursor:pointer;font-weight:600">All (${allTx.length})</button>`+srcAvail.map(src=>{const c=allTx.filter(t=>getAccount(t)===src).length;if(c===0)return`<button disabled style="padding:4px 14px;border-radius:20px;border:1px solid #1a1d27;background:transparent;color:#3a3d4a;font-size:11px;font-weight:600;opacity:0.3">${src} (0)</button>`;return`<button onclick="window._rawFilter='${src}';renderAll()" style="padding:4px 14px;border-radius:20px;border:1px solid var(--border);background:${rf===src?'var(--accent)':'transparent'};color:${rf===src?'white':'var(--text-secondary)'};font-size:11px;cursor:pointer;font-weight:600">${src} (${c})</button>`}).join('');
-  const filtered=rf==='All'?allTx:allTx.filter(t=>getAccount(t)===rf);document.querySelector('#raw-tx-table tbody').innerHTML=filtered.map(t=>{const isInc=t._amount>0;const ac=isInc?'var(--green)':'var(--red)';return`<tr><td>${t[COL_DATE]||''}</td><td style="font-size:11px;color:var(--text-secondary)">${getAccount(t)}</td><td>${(t[COL_DESC]||t['Description 1']||'').substring(0,65)}</td><td><span class="badge green">${t._category}</span></td><td style="text-align:right;color:${ac};font-weight:600">$${t._amount.toFixed(2)}</td></tr>`}).join('');document.getElementById('raw-tx-count').innerHTML=`Showing <strong>${filtered.length}</strong> of ${allTx.length} · Income: <strong style="color:var(--green)">$${filtered.filter(t=>t._amount>0).reduce((s,t)=>s+t._amount,0).toFixed(0)}</strong> · Expenses: <strong style="color:var(--red)">$${filtered.filter(t=>t._amount<0).reduce((s,t)=>s+Math.abs(t._amount),0).toFixed(0)}</strong>`;
+  const filtered=rf==='All'?allTx:allTx.filter(t=>getAccount(t)===rf);document.querySelector('#raw-tx-table tbody').innerHTML=filtered.map(t=>{const isInc=t._amount>0;const ac=isInc?'var(--green)':'var(--red)';return`<tr><td>${t['Transaction Date']||''}</td><td style="font-size:11px;color:var(--text-secondary)">${getAccount(t)}</td><td>${(t['Description 1']||'').substring(0,65)}</td><td><span class="badge green">${t._category}</span></td><td style="text-align:right;color:${ac};font-weight:600">$${t._amount.toFixed(2)}</td></tr>`}).join('');document.getElementById('raw-tx-count').innerHTML=`Showing <strong>${filtered.length}</strong> of ${allTx.length} · Income: <strong style="color:var(--green)">$${filtered.filter(t=>t._amount>0).reduce((s,t)=>s+t._amount,0).toFixed(0)}</strong> · Expenses: <strong style="color:var(--red)">$${filtered.filter(t=>t._amount<0).reduce((s,t)=>s+Math.abs(t._amount),0).toFixed(0)}</strong>`;
 
-  const isAllMonths=selectedMonth==='__all__';const monthKeys=Object.keys(monthlyData).filter(k=>k!=='__all__').sort();document.getElementById('monthly-cards').innerHTML=(isAllMonths?monthKeys:monthKeys.slice(-3)).map(m=>{const d=monthlyData[m];const n=d.income-d.expenses;const s=d.income>0?((n/d.income)*100).toFixed(1):0;const od=(d.categories['Bank Fees / Interest']?.transactions||[]).filter(t=>((t[COL_DESC]||t['Description 1']||'')).toUpperCase().includes('OVERDRAFT'));const odc=Math.abs(od.reduce((a,t)=>a+t._amount,0));return`<div class="card"><h3>${monthLabel(m)}</h3><div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:var(--text-secondary)">Income</span><span style="color:var(--green)">$${d.income.toLocaleString()}</span></div><div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:var(--text-secondary)">Expenses</span><span style="color:var(--red)">$${d.expenses.toLocaleString()}</span></div><div style="display:flex;justify-content:space-between;font-weight:600"><span>Net</span><span style="color:${n>=0?'var(--green)':'var(--red)'}">$${n.toLocaleString()}</span></div><div style="font-size:12px;color:var(--text-secondary);border-top:1px solid var(--border);padding-top:8px;margin-top:8px">Savings: ${s}% · ${d.transactions.length} tx</div>${odc>0?`<div style="margin-top:8px;padding:8px;background:var(--red-bg);border-radius:6px;font-size:11px;color:#fca5a5">🚨 $${odc.toFixed(2)} overdraft fees</div>`:''}</div>`}).join('');
+  const isAllMonths=selectedMonth==='__all__';const monthKeys=Object.keys(monthlyData).filter(k=>k!=='__all__').sort();document.getElementById('monthly-cards').innerHTML=(isAllMonths?monthKeys:monthKeys.slice(-3)).map(m=>{const d=monthlyData[m];const n=d.income-d.expenses;const s=d.income>0?((n/d.income)*100).toFixed(1):0;const od=(d.categories['Bank Fees / Interest']?.transactions||[]).filter(t=>(t['Description 1']||'').toUpperCase().includes('OVERDRAFT'));const odc=Math.abs(od.reduce((a,t)=>a+t._amount,0));return`<div class="card"><h3>${monthLabel(m)}</h3><div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:var(--text-secondary)">Income</span><span style="color:var(--green)">$${d.income.toLocaleString()}</span></div><div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:var(--text-secondary)">Expenses</span><span style="color:var(--red)">$${d.expenses.toLocaleString()}</span></div><div style="display:flex;justify-content:space-between;font-weight:600"><span>Net</span><span style="color:${n>=0?'var(--green)':'var(--red)'}">$${n.toLocaleString()}</span></div><div style="font-size:12px;color:var(--text-secondary);border-top:1px solid var(--border);padding-top:8px;margin-top:8px">Savings: ${s}% · ${d.transactions.length} tx</div>${odc>0?`<div style="margin-top:8px;padding:8px;background:var(--red-bg);border-radius:6px;font-size:11px;color:#fca5a5">🚨 $${odc.toFixed(2)} overdraft fees</div>`:''}</div>`}).join('');
   document.getElementById('cat-search').value='';document.getElementById('cat-search-summary').style.display='none';
 }
 
